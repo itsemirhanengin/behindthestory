@@ -9,7 +9,12 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ChapterCard, type Slot } from "./chapter-card";
-import { ThreadTrack, type ThreadSpan } from "./thread-track";
+import {
+  ThreadBoard,
+  countOverdue,
+  type ThreadFilter,
+  type ThreadSpan,
+} from "./thread-board";
 import type { Chapter, Character, StoryElement } from "@/db/schema";
 
 function buildSlots(chapters: Chapter[]): Slot[] {
@@ -35,6 +40,7 @@ export function StoryMap({ novelId }: { novelId: string }) {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
+  const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
 
   const load = useCallback(async () => {
     try {
@@ -113,6 +119,13 @@ export function StoryMap({ novelId }: { novelId: string }) {
   }
 
   const columns = Math.max(slots.length, 1);
+  // The draft's written edge. A thread cannot be overdue in chapters that are
+  // still empty, so this — not the outline length — is what ages a thread.
+  const writtenThrough = slots.reduce(
+    (last, s) => (s.active.content.trim() ? s.number : last),
+    0,
+  );
+  const overdue = countOverdue(threads, writtenThrough);
   const totalWords = slots.reduce(
     (sum, s) =>
       sum + (s.active.content.trim() ? s.active.content.trim().split(/\s+/).length : 0),
@@ -133,19 +146,30 @@ export function StoryMap({ novelId }: { novelId: string }) {
           {slots.length} chapter{slots.length === 1 ? "" : "s"} ·{" "}
           {totalWords.toLocaleString()} words
         </span>
+        {/*
+          An open thread is only a warning once the draft has run past it —
+          otherwise every setup in a young manuscript would shout, and the
+          badge would stop meaning anything.
+        */}
         {openThreads.length > 0 && (
           <button
-            onClick={() =>
-              setSelectedThread(
-                selectedThread ? null : openThreads[0].element.id,
-              )
+            onClick={() => setThreadFilter("open")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] transition-colors",
+              overdue > 0
+                ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+                : "text-muted-foreground hover:bg-accent",
+            )}
+            title={
+              overdue > 0
+                ? "Threads the draft has moved well past without paying off"
+                : "Threads planted but not yet paid off"
             }
-            className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-500 transition-colors hover:bg-amber-500/20"
-            title="Threads planted but never paid off"
           >
-            <TriangleAlert className="size-3" />
-            {openThreads.length} open thread
-            {openThreads.length === 1 ? "" : "s"}
+            {overdue > 0 && <TriangleAlert className="size-3" />}
+            {overdue > 0
+              ? `${overdue} overdue`
+              : `${openThreads.length} open thread${openThreads.length === 1 ? "" : "s"}`}
           </button>
         )}
         <Button size="sm" className="ml-auto" onClick={() => addChapter()}>
@@ -158,21 +182,23 @@ export function StoryMap({ novelId }: { novelId: string }) {
         <div className="flex flex-1 items-center justify-center">
           <p className="max-w-sm text-center text-sm text-muted-foreground">
             The story starts here. Create your first chapter — threads the AI
-            extracts will appear as tracks beneath the spine as the novel grows.
+            extracts will appear beneath the spine as the novel grows.
           </p>
         </div>
       ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="w-fit p-5">
-            {/*
-              One grid for the whole map: column 1 is the thread label gutter
-              and columns 2..N+1 are the chapter slots. Sharing the grid is
-              what guarantees a thread lines up with the chapters it spans.
-            */}
+        <>
+          {/*
+            The spine scrolls horizontally on its own. Threads used to live in
+            this same grid so their bars could line up with the chapters — they
+            no longer need to, so they no longer pay the price of scrolling out
+            of view whenever the writer looks at a later chapter.
+          */}
+          <ScrollArea className="shrink-0">
+            <div className="w-fit px-5 pb-4 pt-5">
             <div
               className="grid gap-x-3"
               style={{
-                gridTemplateColumns: `14rem repeat(${columns}, var(--slot-w))`,
+                gridTemplateColumns: `repeat(${columns}, var(--slot-w))`,
               }}
             >
               {/* Row 1 — acts */}
@@ -186,7 +212,7 @@ export function StoryMap({ novelId }: { novelId: string }) {
                     className="mb-2 flex items-center gap-2"
                     style={{
                       gridRow: 1,
-                      gridColumn: `${slot.number + 1} / span ${span}`,
+                      gridColumn: `${slot.number} / span ${span}`,
                     }}
                   >
                     <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -201,7 +227,7 @@ export function StoryMap({ novelId }: { novelId: string }) {
               {slots.map((slot) => (
                 <div
                   key={slot.number}
-                  style={{ gridRow: 2, gridColumn: slot.number + 1 }}
+                  style={{ gridRow: 2, gridColumn: slot.number }}
                 >
                   <ChapterCard
                     slot={slot}
@@ -244,87 +270,23 @@ export function StoryMap({ novelId }: { novelId: string }) {
                 </div>
               ))}
 
-              {/* Row 3 — threads heading */}
-              <div
-                className="mb-2 mt-8 flex items-center gap-3 px-2"
-                style={{ gridRow: 3, gridColumn: `1 / span ${columns + 1}` }}
-              >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  Threads
-                </span>
-                {selectedThread && (
-                  <button
-                    onClick={() => setSelectedThread(null)}
-                    className="text-[10px] text-primary hover:underline"
-                  >
-                    clear
-                  </button>
-                )}
-                {threads.length === 0 && (
-                  <span className="text-[11px] normal-case tracking-normal text-muted-foreground">
-                    Nothing tracked yet — analyze a written chapter and its
-                    twists, foreshadowing and plot threads appear here.
-                  </span>
-                )}
-              </div>
-
-              {/* Rows 4+ — one track per thread */}
-              {threads.map((span, i) => (
-                <ThreadTrack
-                  key={span.element.id}
-                  span={span}
-                  columns={columns}
-                  row={4 + i}
-                  selected={selectedThread === span.element.id}
-                  onSelect={() =>
-                    setSelectedThread(
-                      selectedThread === span.element.id
-                        ? null
-                        : span.element.id,
-                    )
-                  }
-                />
-              ))}
             </div>
-
-            <div className="mt-4">
-
-              {selectedThread && (
-                <div className="mt-3 max-w-2xl rounded-lg border bg-card/60 p-3">
-                  {(() => {
-                    const span = threads.find(
-                      (t) => t.element.id === selectedThread,
-                    );
-                    if (!span) return null;
-                    return (
-                      <>
-                        <p className="text-xs font-medium">
-                          {span.element.title}
-                        </p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {span.element.description}
-                        </p>
-                        <p
-                          className={cn(
-                            "mt-2 text-[11px]",
-                            span.to === null
-                              ? "text-amber-500"
-                              : "text-emerald-400",
-                          )}
-                        >
-                          {span.to === null
-                            ? `Planted in chapter ${span.from}, still unresolved.`
-                            : `Planted in chapter ${span.from}, paid off in chapter ${span.to}.`}
-                        </p>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
             </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+
+          <div className="min-h-0 flex-1 border-t">
+            <ThreadBoard
+              threads={threads}
+              chapterCount={columns}
+              writtenThrough={writtenThrough}
+              filter={threadFilter}
+              onFilterChange={setThreadFilter}
+              selected={selectedThread}
+              onSelect={setSelectedThread}
+            />
           </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+        </>
       )}
     </div>
   );
