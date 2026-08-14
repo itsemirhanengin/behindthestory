@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Check, Loader2, Sparkles, X } from "lucide-react";
+import {
+  RiCheckLine,
+  RiCloseLine,
+  RiLoader4Line,
+  RiSparkling2Line,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -95,7 +100,7 @@ export function AiCharacterDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-4 text-primary" /> AI Character
+            <RiSparkling2Line className="size-4 text-primary" /> AI Character
           </DialogTitle>
           <DialogDescription>
             The AI invents a character that fits your premise and cast.
@@ -111,9 +116,9 @@ export function AiCharacterDialog({
             />
             <Button onClick={generate} disabled={busy} className="w-full">
               {busy ? (
-                <Loader2 className="size-4 animate-spin" />
+                <RiLoader4Line className="size-4 animate-spin" />
               ) : (
-                <Sparkles className="size-4" />
+                <RiSparkling2Line className="size-4" />
               )}
               Generate
             </Button>
@@ -144,17 +149,17 @@ export function AiCharacterDialog({
             </ScrollArea>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setDraft(null)}>
-                <X className="size-4" /> Discard
+                <RiCloseLine className="size-4" /> Discard
               </Button>
               <Button variant="secondary" onClick={generate} disabled={busy}>
                 {busy ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <RiLoader4Line className="size-4 animate-spin" />
                 ) : (
                   "Regenerate"
                 )}
               </Button>
               <Button onClick={accept} disabled={busy}>
-                <Check className="size-4" /> Add to story
+                <RiCheckLine className="size-4" /> Add to story
               </Button>
             </DialogFooter>
           </>
@@ -244,7 +249,7 @@ export function InferRelationshipsDialog({
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-4 text-primary" /> Infer Relationships
+            <RiSparkling2Line className="size-4 text-primary" /> Infer Relationships
           </DialogTitle>
           <DialogDescription>
             The AI reads your chapters and character profiles, then proposes
@@ -255,9 +260,9 @@ export function InferRelationshipsDialog({
         {suggestions === null ? (
           <Button onClick={run} disabled={busy} className="w-full">
             {busy ? (
-              <Loader2 className="size-4 animate-spin" />
+              <RiLoader4Line className="size-4 animate-spin" />
             ) : (
-              <Sparkles className="size-4" />
+              <RiSparkling2Line className="size-4" />
             )}
             Analyze story
           </Button>
@@ -307,10 +312,10 @@ export function InferRelationshipsDialog({
                         )
                       }
                     >
-                      <X className="size-3.5" /> Skip
+                      <RiCloseLine className="size-3.5" /> Skip
                     </Button>
                     <Button size="sm" onClick={() => accept(s)}>
-                      <Check className="size-3.5" /> Accept
+                      <RiCheckLine className="size-3.5" /> Accept
                     </Button>
                   </div>
                 </div>

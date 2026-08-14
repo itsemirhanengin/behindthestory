@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  RiAddLine,
+  RiDeleteBinLine,
+  RiLoader4Line,
+  RiSparkling2Line,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -259,7 +264,7 @@ export function RelationshipDialog({
                 <SelectItem key={t} value={t}>
                   <span className="flex items-center gap-2">
                     <span
-                      className="size-2 rounded-full"
+                      className="size-2 rounded-none"
                       style={{ backgroundColor: relationshipColors[t] }}
                     />
                     {t}
@@ -336,7 +341,7 @@ export function RelationshipDialog({
                     )
                   }
                   className={cn(
-                    "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+                    "rounded-none border px-2 py-0.5 text-[11px] transition-colors",
                     on
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border text-muted-foreground hover:text-foreground",
@@ -357,7 +362,7 @@ export function RelationshipDialog({
               key={i}
               onClick={() => setImpact(i)}
               className={cn(
-                "rounded-full border px-2.5 py-0.5 text-[11px] capitalize transition-colors",
+                "rounded-none border px-2.5 py-0.5 text-[11px] capitalize transition-colors",
                 impact === i
                   ? impactStyles[i]
                   : "border-border text-muted-foreground hover:text-foreground",
@@ -383,7 +388,7 @@ export function RelationshipDialog({
             {a} <span className="text-muted-foreground">↔</span> {b}
             {stateNow && (
               <span
-                className="ml-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                className="ml-1 rounded-none border px-2 py-0.5 text-[10px] font-medium"
                 style={{
                   borderColor: relationshipColors[stateNow.type],
                   color: relationshipColors[stateNow.type],
@@ -418,7 +423,7 @@ export function RelationshipDialog({
             </ScrollArea>
             <DialogFooter>
               <Button onClick={create} disabled={busy}>
-                {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
+                {busy ? <RiLoader4Line className="size-4 animate-spin" /> : "Create"}
               </Button>
             </DialogFooter>
           </>
@@ -467,18 +472,18 @@ export function RelationshipDialog({
                             {describeTransition(step)}
                           </span>
                           {step.isTurn && (
-                            <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+                            <span className="rounded-none bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
                               turn
                             </span>
                           )}
                           <span
                             className={cn(
-                              "ml-auto flex items-center gap-1 rounded-full border px-1.5 text-[10px] capitalize",
+                              "ml-auto flex items-center gap-1 rounded-none border px-1.5 text-[10px] capitalize",
                               impactStyles[e.impact],
                             )}
                           >
                             {e.origin === "ai" && (
-                              <Sparkles className="size-2.5" />
+                              <RiSparkling2Line className="size-2.5" />
                             )}
                             {e.impact}
                           </span>
@@ -487,7 +492,7 @@ export function RelationshipDialog({
                             title="Remove this event"
                             onClick={() => removeEvent(e.id)}
                           >
-                            <Trash2 className="size-3" />
+                            <RiDeleteBinLine className="size-3" />
                           </button>
                         </div>
                         {e.cause && (
@@ -515,9 +520,9 @@ export function RelationshipDialog({
                   className="mt-4 w-full"
                 >
                   {busy ? (
-                    <Loader2 className="size-4 animate-spin" />
+                    <RiLoader4Line className="size-4 animate-spin" />
                   ) : (
-                    <Plus className="size-4" />
+                    <RiAddLine className="size-4" />
                   )}
                   Add to timeline
                 </Button>
@@ -547,7 +552,7 @@ export function RelationshipDialog({
                 </div>
                 <Button onClick={saveNotes} disabled={busy} className="w-full">
                   {busy ? (
-                    <Loader2 className="size-4 animate-spin" />
+                    <RiLoader4Line className="size-4 animate-spin" />
                   ) : (
                     "Save notes"
                   )}
@@ -562,7 +567,7 @@ export function RelationshipDialog({
                 onClick={removeRelationship}
                 title="Delete the relationship and its whole timeline"
               >
-                <Trash2 className="size-4 text-destructive" />
+                <RiDeleteBinLine className="size-4 text-destructive" />
               </Button>
             </DialogFooter>
           </Tabs>

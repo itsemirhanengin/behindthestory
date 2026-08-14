@@ -2,14 +2,35 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(html.dark *));
+
+/* ---------------------------------------------------------------------------
+   Design system: printed page, not dashboard.
+
+   Three rules hold the whole platform together, and all three are enforced
+   here rather than per component:
+
+     1. No corner radius. Everything is a square-cut block of type.
+     2. No shadows. Separation comes from hairline rules and a change of
+        ground — the way it does on paper.
+     3. Warm ground, warm ink. Nothing in the palette is neutral grey and
+        nothing is near-black; the day theme is paper and the night theme is
+        brown-black ink, never #000.
+
+   `--radius` below is the single lever for rule 1: the whole `rounded-*`
+   scale derives from it, so radius can only ever be reintroduced on purpose
+   and everywhere at once.
+--------------------------------------------------------------------------- */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: Georgia, "Times New Roman", serif;
+
+  --font-sans: var(--font-source-sans);
+  --font-serif: var(--font-source-serif);
+  --font-heading: var(--font-source-serif);
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +60,17 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+
+  /* Status, named by meaning rather than by hue. Raw `emerald-500` /
+     `amber-500` literals were scattered across a dozen components and are the
+     fastest way to make a warm palette look like a default Tailwind one. */
+  --color-affirm: var(--affirm);
+  --color-caution: var(--caution);
+  --color-alarm: var(--alarm);
+
+  /* Every step derives from --radius, which is 0. Changing that one value is
+     the only way radius comes back, and it comes back everywhere. */
+  --radius-xs: calc(var(--radius) * 0.4);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,73 +80,102 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* --- Day: paper -------------------------------------------------------- */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0px;
+
+  --background: oklch(0.975 0.008 85);
+  --foreground: oklch(0.216 0.008 55);
+  /* Raised surfaces go *lighter* than the ground — a page on a desk, not a
+     panel floating over a void. This is what replaces the shadow. */
+  --card: oklch(0.992 0.006 90);
+  --card-foreground: oklch(0.216 0.008 55);
+  --popover: oklch(0.995 0.005 90);
+  --popover-foreground: oklch(0.216 0.008 55);
+
+  /* Oxblood: dark enough to read as ink in a filled button, warm enough to
+     work as the accent on icons, rules and active states. */
+  --primary: oklch(0.345 0.098 32);
+  --primary-foreground: oklch(0.985 0.006 85);
+  --secondary: oklch(0.935 0.012 82);
+  --secondary-foreground: oklch(0.26 0.01 55);
+  --muted: oklch(0.948 0.01 84);
+  --muted-foreground: oklch(0.5 0.014 65);
+  --accent: oklch(0.92 0.014 82);
+  --accent-foreground: oklch(0.24 0.01 55);
+  --destructive: oklch(0.45 0.13 30);
+
+  --border: oklch(0.885 0.012 80);
+  --input: oklch(0.87 0.014 80);
+  --ring: oklch(0.5 0.09 32);
+
+  /* Muted, earthy status colours — readable on paper without shouting. */
+  --affirm: oklch(0.48 0.07 150);
+  --caution: oklch(0.55 0.1 75);
+  --alarm: oklch(0.47 0.14 28);
+
+  --chart-1: oklch(0.45 0.1 32);
+  --chart-2: oklch(0.55 0.075 75);
+  --chart-3: oklch(0.48 0.055 145);
+  --chart-4: oklch(0.44 0.06 240);
+  --chart-5: oklch(0.38 0.02 60);
+
+  --sidebar: oklch(0.955 0.011 84);
+  --sidebar-foreground: oklch(0.216 0.008 55);
+  --sidebar-primary: oklch(0.345 0.098 32);
+  --sidebar-primary-foreground: oklch(0.985 0.006 85);
+  --sidebar-accent: oklch(0.92 0.014 82);
+  --sidebar-accent-foreground: oklch(0.24 0.01 55);
+  --sidebar-border: oklch(0.885 0.012 80);
+  --sidebar-ring: oklch(0.5 0.09 32);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+/* --- Night: warm ink --------------------------------------------------- */
+/* Scoped to `html` on purpose: see the note on `.react-flow` below. */
+html.dark {
+  --background: oklch(0.185 0.008 60);
+  --foreground: oklch(0.925 0.014 85);
+  --card: oklch(0.225 0.009 60);
+  --card-foreground: oklch(0.925 0.014 85);
+  --popover: oklch(0.245 0.01 60);
+  --popover-foreground: oklch(0.925 0.014 85);
+
+  /* Oxblood has nowhere to go on a dark ground, so the accent warms up into
+     terracotta and keeps the same job. */
+  --primary: oklch(0.7 0.1 55);
+  --primary-foreground: oklch(0.19 0.01 60);
+  --secondary: oklch(0.275 0.01 60);
+  --secondary-foreground: oklch(0.92 0.014 85);
+  --muted: oklch(0.26 0.009 60);
+  --muted-foreground: oklch(0.685 0.015 75);
+  --accent: oklch(0.295 0.011 60);
+  --accent-foreground: oklch(0.93 0.012 85);
+  --destructive: oklch(0.6 0.15 28);
+
+  /* Opaque, not white-at-10%: with no shadows the border is the only thing
+     separating two surfaces, so it has to hold its own at 1px. */
+  --border: oklch(0.335 0.01 65);
+  --input: oklch(0.36 0.01 65);
+  --ring: oklch(0.55 0.085 55);
+
+  --affirm: oklch(0.7 0.07 150);
+  --caution: oklch(0.75 0.09 80);
+  --alarm: oklch(0.63 0.14 28);
+
+  --chart-1: oklch(0.7 0.1 55);
+  --chart-2: oklch(0.75 0.08 90);
+  --chart-3: oklch(0.68 0.06 150);
+  --chart-4: oklch(0.65 0.07 245);
+  --chart-5: oklch(0.6 0.02 70);
+
+  --sidebar: oklch(0.205 0.009 60);
+  --sidebar-foreground: oklch(0.925 0.014 85);
+  --sidebar-primary: oklch(0.7 0.1 55);
+  --sidebar-primary-foreground: oklch(0.19 0.01 60);
+  --sidebar-accent: oklch(0.295 0.011 60);
+  --sidebar-accent-foreground: oklch(0.93 0.012 85);
+  --sidebar-border: oklch(0.335 0.01 65);
+  --sidebar-ring: oklch(0.55 0.085 55);
 }
 
 @layer base {
@@ -123,18 +184,53 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings:
+      "kern" 1,
+      "liga" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply font-sans;
   }
+  /* A highlighter over ink, rather than a block of accent colour. */
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 20%, transparent);
+    color: var(--foreground);
+  }
+  /* Headings are set in the book face and want to sit tighter than UI text. */
+  h1,
+  h2,
+  h3 {
+    font-feature-settings:
+      "kern" 1,
+      "liga" 1,
+      "onum" 1;
+  }
 }
-/* --- Manuscript typography --------------------------------------------- */
-/* Applied to the Tiptap document and reused by the reading view, so a
-   chapter looks the same while drafting as it does when read back. */
+
 @layer components {
+  /* --- Editorial primitives ------------------------------------------- */
+
+  /* Small-caps label used for eyebrows, colophon terms and section rules.
+     Frequent enough across the platform to be a class rather than six
+     utilities repeated everywhere. */
+  .label-caps {
+    @apply text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground;
+  }
+
+  /* Centred dinkus, matching the one the manuscript uses for scene breaks. */
+  .dinkus::before {
+    content: "· · ·";
+    @apply tracking-[0.5em];
+  }
+
+  /* --- Manuscript typography ------------------------------------------ */
+  /* Applied to the Tiptap document and reused by the reading view, so a
+     chapter looks the same while drafting as it does when read back. */
   .prose-editor,
   .manuscript {
-    @apply font-serif text-[15px] leading-[1.75];
+    @apply font-serif text-[1.0625rem] leading-[1.8];
   }
 
   .prose-editor p,
@@ -142,8 +238,12 @@
     @apply my-0;
   }
 
-  /* Book-style indentation: consecutive paragraphs indent, the first does not. */
-  .prose-editor p + p,
+  /* Drafting uses block paragraphs for easier cursor tracking. The reading
+     view keeps traditional book indentation as a separate concern. */
+  .prose-editor p + p {
+    margin-top: 0.9em;
+  }
+
   .manuscript p + p {
     @apply indent-8;
   }
@@ -182,4 +282,116 @@
   .prose-editor:focus {
     @apply outline-none;
   }
+
+  .prose-editor > .block-range-selected {
+    border-radius: calc(var(--radius) * 0.65);
+    background: color-mix(in oklab, var(--primary) 11%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 11%, transparent);
+  }
+
+  /* The paragraph stays put but reads as already picked up, while its copy
+     rides with the cursor. */
+  .prose-editor > .block-lifted {
+    opacity: 0.3;
+  }
+
+  /* A drag is a single gesture: keep the grabbing cursor even when the pointer
+     leaves the handle it started on. */
+  body.is-dragging-block,
+  body.is-dragging-block * {
+    cursor: grabbing !important;
+    user-select: none;
+  }
+
+  .selecto-selection {
+    z-index: 40 !important;
+    border: 1px solid color-mix(in oklab, var(--primary) 78%, transparent) !important;
+    background: color-mix(in oklab, var(--primary) 13%, transparent) !important;
+  }
+
+  .ai-suggestion-target {
+    background: color-mix(in oklab, var(--primary) 12%, transparent);
+    box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--primary) 55%, transparent);
+  }
+
+  .ai-suggestion-anchor {
+    display: inline-block;
+    width: 2px;
+    height: 1.25em;
+    margin-inline: 2px;
+    vertical-align: text-bottom;
+    background: var(--primary);
+  }
+}
+
+@keyframes suggestion-progress {
+  0% {
+    transform: translateX(-110%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(310%);
+  }
+}
+
+/* --- Graph canvas ------------------------------------------------------- */
+/* React Flow ships its own palette plus its own light/dark switch, and it
+   implements dark mode by putting a `dark` class on its own container. While
+   the palette above was selected by a bare `.dark`, that class silently
+   re-declared every token inside the canvas — which is how a black graph ended
+   up sitting in the middle of a paper-coloured app.
+
+   So the canvas is never told to theme itself: `colorMode` stays "light" in the
+   components and these bindings supply the palette instead. They point at the
+   same tokens as everything else, so the canvas follows day and night on its
+   own, and inherits the no-radius, no-shadow rules for free. */
+.react-flow {
+  --xy-background-color-default: var(--background);
+  --xy-background-pattern-dots-color-default: var(--border);
+  --xy-background-pattern-lines-color-default: var(--border);
+  --xy-background-pattern-cross-color-default: var(--border);
+
+  --xy-node-background-color-default: var(--card);
+  --xy-node-color-default: var(--card-foreground);
+  --xy-node-border-default: 1px solid var(--border);
+  --xy-node-border-radius-default: 0;
+  --xy-node-boxshadow-default: none;
+  --xy-node-boxshadow-hover-default: none;
+  --xy-node-boxshadow-selected-default: none;
+  --xy-node-group-background-color-default: var(--muted);
+
+  --xy-handle-background-color-default: var(--muted-foreground);
+  --xy-handle-border-color-default: var(--background);
+
+  --xy-edge-stroke-default: var(--border);
+  --xy-edge-stroke-selected-default: var(--primary);
+  --xy-edge-label-color-default: var(--foreground);
+  --xy-edge-label-background-color-default: var(--card);
+  --xy-connectionline-stroke-default: var(--primary);
+
+  --xy-controls-button-background-color-default: var(--card);
+  --xy-controls-button-background-color-hover-default: var(--accent);
+  --xy-controls-button-color-default: var(--muted-foreground);
+  --xy-controls-button-color-hover-default: var(--accent-foreground);
+  --xy-controls-button-border-color-default: var(--border);
+  --xy-controls-box-shadow-default: none;
+
+  --xy-minimap-background-color-default: var(--card);
+  --xy-minimap-mask-background-color-default: color-mix(
+    in oklab,
+    var(--background) 75%,
+    transparent
+  );
+
+  --xy-attribution-background-color-default: transparent;
+
+  --xy-selection-background-color-default: color-mix(
+    in oklab,
+    var(--primary) 8%,
+    transparent
+  );
+  --xy-selection-border-default: 1px solid var(--primary);
+  --xy-resize-background-color-default: var(--primary);
 }

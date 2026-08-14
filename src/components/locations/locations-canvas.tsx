@@ -17,7 +17,12 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { toast } from "sonner";
-import { Loader2, MapPin, Plus, Sparkles } from "lucide-react";
+import {
+  RiAddLine,
+  RiLoader4Line,
+  RiMapPinLine,
+  RiSparkling2Line,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import {
@@ -49,8 +54,8 @@ function toEdge(link: LocationLink): Edge {
     label: link.label || undefined,
     type: "smoothstep",
     animated: false,
-    style: { stroke: "#34d399", strokeWidth: 1.5, opacity: 0.6 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#34d399" },
+    style: { stroke: "#4a6b5c", strokeWidth: 1.5, opacity: 0.6 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "#4a6b5c" },
     labelStyle: { fill: "var(--muted-foreground)", fontSize: 10 },
     labelBgStyle: { fill: "var(--card)" },
   };
@@ -218,27 +223,29 @@ export function LocationsCanvas({ novelId }: { novelId: string }) {
         onEdgeClick={onEdgeClick}
         onNodeDragStop={onNodeDragStop}
         fitView
-        colorMode="dark"
+        // The palette comes from our tokens (see `.react-flow` in globals.css);
+        // "dark" here would let React Flow re-theme this subtree.
+        colorMode="light"
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={null}
       >
         <Background gap={24} />
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable className="!bg-card" nodeColor={() => "#34d399"} />
+        <MiniMap pannable zoomable className="!bg-card" nodeColor={() => "#4a6b5c"} />
       </ReactFlow>
 
       <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
         <div className="mr-2 flex items-center gap-2 text-sm font-semibold">
-          <MapPin className="size-4 text-emerald-400" /> Locations
+          <RiMapPinLine className="size-4 text-affirm" /> Locations
         </div>
         <Button size="sm" onClick={addLocation}>
-          <Plus className="size-4" /> Add Location
+          <RiAddLine className="size-4" /> Add Location
         </Button>
         <Button size="sm" variant="secondary" onClick={suggestLocation} disabled={aiBusy}>
           {aiBusy ? (
-            <Loader2 className="size-4 animate-spin" />
+            <RiLoader4Line className="size-4 animate-spin" />
           ) : (
-            <Sparkles className="size-4" />
+            <RiSparkling2Line className="size-4" />
           )}
           Suggest Location
         </Button>

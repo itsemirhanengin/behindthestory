@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
+import { RiLoader4Line, RiShieldCheckLine, RiShieldCrossLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -19,8 +19,8 @@ type Issue = {
 };
 
 const SEVERITY_STYLES: Record<Issue["severity"], string> = {
-  high: "border-rose-500/50 bg-rose-500/5",
-  medium: "border-amber-500/40 bg-amber-500/5",
+  high: "border-alarm/50 bg-alarm/5",
+  medium: "border-caution/40 bg-caution/5",
   low: "border-border bg-card/40",
 };
 
@@ -37,6 +37,7 @@ type Props = {
   chapterId: string;
   disabled: boolean;
   onLocate: (quote: string) => boolean;
+  compact?: boolean;
 };
 
 /**
@@ -48,6 +49,7 @@ export function ContinuityPanel({
   chapterId,
   disabled,
   onLocate,
+  compact = false,
 }: Props) {
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,26 +74,28 @@ export function ContinuityPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="space-y-2 border-b p-3">
-        <h3 className="text-sm font-semibold">Continuity check</h3>
-        <p className="text-[11px] leading-snug text-muted-foreground">
+      <div className={cn("space-y-2 p-3", !compact && "border-b")}>
+        <h3 className="text-sm font-medium">Continuity</h3>
+        <p className="text-base/7 text-muted-foreground sm:text-sm/6">
           Reads this chapter against the story bible and reports where it breaks
           canon — dead characters acting, resolved threads re-planted, voice or
           POV drift.
         </p>
         <Button
+          type="button"
           size="sm"
+          variant="secondary"
           className="w-full"
           onClick={run}
           disabled={busy || disabled}
         >
           {busy ? (
             <>
-              <Loader2 className="size-4 animate-spin" /> Checking...
+              <RiLoader4Line className="size-4 animate-spin" /> Checking...
             </>
           ) : (
             <>
-              <ShieldAlert className="size-4" />
+              <RiShieldCrossLine className="size-4" />
               {issues === null ? "Run check" : "Re-check"}
             </>
           )}
@@ -101,17 +105,18 @@ export function ContinuityPanel({
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-2 p-3">
           {issues === null ? (
-            <p className="text-[11px] text-muted-foreground">
-              Nothing checked yet.
+            <p className="text-base/7 text-muted-foreground sm:text-sm/6">
+              No continuity check has been run yet.
             </p>
           ) : issues.length === 0 ? (
-            <p className="flex items-center gap-2 text-xs text-emerald-400">
-              <ShieldCheck className="size-4" /> This chapter is consistent with
-              the story bible.
+            <p className="flex items-start gap-2 text-base/7 text-affirm sm:text-sm/6">
+              <RiShieldCheckLine className="size-5 shrink-0 sm:size-4" /> This chapter is
+              consistent with the story bible.
             </p>
           ) : (
             issues.map((issue, i) => (
               <button
+                type="button"
                 key={i}
                 onClick={() => {
                   if (!issue.locatable || !onLocate(issue.quote)) {
@@ -121,7 +126,7 @@ export function ContinuityPanel({
                   }
                 }}
                 className={cn(
-                  "w-full rounded-lg border p-2.5 text-left transition-colors hover:brightness-125",
+                  "w-full rounded-lg border p-2.5 text-left hover:brightness-125",
                   SEVERITY_STYLES[issue.severity],
                 )}
               >
@@ -129,15 +134,15 @@ export function ContinuityPanel({
                   <Badge variant="outline" className="text-[9px] uppercase">
                     {TYPE_LABELS[issue.type] ?? issue.type}
                   </Badge>
-                  <span className="text-[9px] uppercase text-muted-foreground">
+                  <span className="text-muted-foreground">
                     {issue.severity}
                   </span>
                 </div>
-                <p className="mt-1.5 border-l-2 border-muted-foreground/30 pl-2 text-[11px] italic text-muted-foreground">
+                <p className="mt-1.5 border-l-2 border-muted-foreground/30 pl-2 text-base/7 italic text-muted-foreground sm:text-sm/6">
                   “{issue.quote}”
                 </p>
-                <p className="mt-1.5 text-xs">{issue.issue}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1.5 text-base/7 sm:text-sm/6">{issue.issue}</p>
+                <p className="mt-1 text-base/7 text-muted-foreground sm:text-sm/6">
                   → {issue.suggestion}
                 </p>
               </button>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Trash2 } from "lucide-react";
+import { RiDeleteBinLine, RiLoader4Line, RiSparkling2Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -46,14 +46,14 @@ import {
 } from "@/lib/story-state";
 
 const CHARACTER_COLORS = [
-  "#8b5cf6",
-  "#ec4899",
-  "#f59e0b",
-  "#22c55e",
-  "#3b82f6",
-  "#ef4444",
-  "#14b8a6",
-  "#f97316",
+  "#8c3a2b", // terracotta
+  "#b07d48", // ochre
+  "#5c6e4a", // olive
+  "#3f5e6b", // slate teal
+  "#6b4c7a", // plum
+  "#a85c4a", // clay
+  "#4a6b5c", // sage
+  "#7a6a4f", // umber
 ];
 
 type Props = {
@@ -280,7 +280,7 @@ export function CharacterSheet({
         <SheetHeader className="border-b">
           <SheetTitle className="flex items-center gap-2">
             <span
-              className="inline-block size-3 rounded-full"
+              className="inline-block size-3 rounded-none"
               style={{ backgroundColor: form.color ?? character.color }}
             />
             {form.name || character.name}
@@ -350,7 +350,7 @@ export function CharacterSheet({
                   {CHARACTER_COLORS.map((c) => (
                     <button
                       key={c}
-                      className="size-6 rounded-full border-2 transition-transform hover:scale-110"
+                      className="size-6 rounded-none border-2 transition-transform hover:scale-110"
                       style={{
                         backgroundColor: c,
                         borderColor:
@@ -480,7 +480,7 @@ export function CharacterSheet({
                             }
                           }}
                         >
-                          <Trash2 className="size-3" />
+                          <RiDeleteBinLine className="size-3" />
                         </button>
                       </li>
                     ))}
@@ -584,11 +584,11 @@ export function CharacterSheet({
                         </span>
                         <span
                           className={cn(
-                            "ml-auto flex items-center gap-1 rounded-full border px-1.5 text-[10px] capitalize",
+                            "ml-auto flex items-center gap-1 rounded-none border px-1.5 text-[10px] capitalize",
                             impactStyles[e.impact],
                           )}
                         >
-                          {e.origin === "ai" && <Sparkles className="size-2.5" />}
+                          {e.origin === "ai" && <RiSparkling2Line className="size-2.5" />}
                           {e.impact}
                         </span>
                         <button
@@ -596,7 +596,7 @@ export function CharacterSheet({
                           title="Remove this event"
                           onClick={() => removeStatusEvent(e.id)}
                         >
-                          <Trash2 className="size-3" />
+                          <RiDeleteBinLine className="size-3" />
                         </button>
                       </div>
                       {e.cause && (
@@ -677,7 +677,7 @@ export function CharacterSheet({
                             )
                           }
                           className={cn(
-                            "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+                            "rounded-none border px-2 py-0.5 text-[11px] transition-colors",
                             on
                               ? "border-primary bg-primary/10 text-primary"
                               : "border-border text-muted-foreground hover:text-foreground",
@@ -697,7 +697,7 @@ export function CharacterSheet({
                       key={i}
                       onClick={() => setStatusImpact(i)}
                       className={cn(
-                        "rounded-full border px-2.5 py-0.5 text-[11px] capitalize transition-colors",
+                        "rounded-none border px-2.5 py-0.5 text-[11px] capitalize transition-colors",
                         statusImpact === i
                           ? impactStyles[i]
                           : "border-border text-muted-foreground hover:text-foreground",
@@ -714,7 +714,7 @@ export function CharacterSheet({
                   className="w-full"
                 >
                   {statusBusy ? (
-                    <Loader2 className="size-4 animate-spin" />
+                    <RiLoader4Line className="size-4 animate-spin" />
                   ) : (
                     "Add to timeline"
                   )}
@@ -726,18 +726,18 @@ export function CharacterSheet({
 
         <div className="flex items-center gap-2 border-t p-4">
           <Button onClick={save} disabled={saving} className="flex-1">
-            {saving ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+            {saving ? <RiLoader4Line className="size-4 animate-spin" /> : "Save"}
           </Button>
           <Button variant="secondary" onClick={fillWithAI} disabled={aiBusy}>
             {aiBusy ? (
-              <Loader2 className="size-4 animate-spin" />
+              <RiLoader4Line className="size-4 animate-spin" />
             ) : (
-              <Sparkles className="size-4" />
+              <RiSparkling2Line className="size-4" />
             )}
             Fill with AI
           </Button>
           <Button variant="ghost" size="icon" onClick={remove}>
-            <Trash2 className="size-4 text-destructive" />
+            <RiDeleteBinLine className="size-4 text-destructive" />
           </Button>
         </div>
       </SheetContent>

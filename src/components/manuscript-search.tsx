@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookText, MapPin, Search, Sparkles, User } from "lucide-react";
+import {
+  RiBookLine,
+  RiMapPinLine,
+  RiSearchLine,
+  RiSparkling2Line,
+  RiUserLine,
+} from "@remixicon/react";
 import {
   Command,
   CommandDialog,
@@ -15,12 +21,12 @@ import {
 import { api } from "@/lib/api";
 import type { SearchHit } from "@/app/api/novels/[novelId]/search/route";
 
-const GROUPS: { kind: SearchHit["kind"]; label: string; icon: typeof User }[] = [
-  { kind: "chapter", label: "Manuscript", icon: BookText },
-  { kind: "character", label: "Characters", icon: User },
-  { kind: "fact", label: "Established facts", icon: User },
-  { kind: "location", label: "Locations", icon: MapPin },
-  { kind: "element", label: "Threads", icon: Sparkles },
+const GROUPS: { kind: SearchHit["kind"]; label: string; icon: typeof RiUserLine }[] = [
+  { kind: "chapter", label: "Manuscript", icon: RiBookLine },
+  { kind: "character", label: "Characters", icon: RiUserLine },
+  { kind: "fact", label: "Established facts", icon: RiUserLine },
+  { kind: "location", label: "Locations", icon: RiMapPinLine },
+  { kind: "element", label: "Threads", icon: RiSparkling2Line },
 ];
 
 /**
@@ -67,9 +73,9 @@ export function ManuscriptSearch({ novelId }: { novelId: string }) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="mx-3 mb-2 flex items-center gap-2 rounded-md border bg-background/50 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent"
+        className="flex w-full items-center gap-2 border bg-background/50 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent"
       >
-        <Search className="size-3.5" />
+        <RiSearchLine className="size-3.5" />
         <span className="flex-1">Search novel</span>
         <kbd className="rounded border px-1 text-[10px]">⌘K</kbd>
       </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, User } from "lucide-react";
+import { RiMapPinLine, RiUserLine } from "@remixicon/react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -43,14 +43,16 @@ export function ContextPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="border-b p-3">
-        <h3 className="text-sm font-semibold">Story Context</h3>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-          Selected items are fed to the AI in full detail. Type @ in the editor
-          for quick mentions.
+        <h2 className="text-sm font-medium">Notes & sources</h2>
+        <p className="mt-1 text-base/7 text-muted-foreground sm:text-sm/6">
+          Story context is built automatically. Pin something only when it must
+          be emphasized for the next suggestion.
         </p>
         <Input
-          className="mt-2 h-8"
-          placeholder="Filter..."
+          name="source-filter"
+          aria-label="Filter story sources"
+          className="mt-3 h-9 sm:h-8 max-sm:text-base"
+          placeholder="Find a character, place, or thread"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -58,13 +60,14 @@ export function ContextPanel({
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-4 p-3">
           <section>
-            <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <User className="size-3" /> Characters
-            </h4>
+            <h3 className="label-caps mb-1.5 flex items-center gap-1.5">
+              <RiUserLine className="size-4 shrink-0" /> Characters
+            </h3>
             <div className="flex flex-wrap gap-1.5">
               {chars.map((c) => (
                 <Badge
                   key={c.id}
+                  asChild
                   variant={
                     selection.characterIds.has(c.id) ? "default" : "outline"
                   }
@@ -74,74 +77,92 @@ export function ContextPanel({
                       ? { backgroundColor: c.color, color: "white" }
                       : undefined
                   }
-                  onClick={() => onToggle("character", c.id)}
                 >
-                  {c.name}
+                  <button
+                    type="button"
+                    onClick={() => onToggle("character", c.id)}
+                    aria-pressed={selection.characterIds.has(c.id)}
+                  >
+                    {c.name}
+                  </button>
                 </Badge>
               ))}
               {chars.length === 0 && (
-                <span className="text-[11px] text-muted-foreground">none</span>
+                <p className="text-base/7 text-muted-foreground sm:text-sm/6">
+                  None.
+                </p>
               )}
             </div>
           </section>
 
           <section>
-            <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <MapPin className="size-3" /> Locations
-            </h4>
+            <h3 className="label-caps mb-1.5 flex items-center gap-1.5">
+              <RiMapPinLine className="size-4 shrink-0" /> Locations
+            </h3>
             <div className="flex flex-wrap gap-1.5">
               {locs.map((l) => (
                 <Badge
                   key={l.id}
+                  asChild
                   variant={
                     selection.locationIds.has(l.id) ? "default" : "outline"
                   }
                   className="cursor-pointer select-none"
-                  onClick={() => onToggle("location", l.id)}
                 >
-                  {l.name}
+                  <button
+                    type="button"
+                    onClick={() => onToggle("location", l.id)}
+                    aria-pressed={selection.locationIds.has(l.id)}
+                  >
+                    {l.name}
+                  </button>
                 </Badge>
               ))}
               {locs.length === 0 && (
-                <span className="text-[11px] text-muted-foreground">none</span>
+                <p className="text-base/7 text-muted-foreground sm:text-sm/6">
+                  None.
+                </p>
               )}
             </div>
           </section>
 
           <section>
-            <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="label-caps mb-1.5">
               Twists · Foreshadowing · Threads
-            </h4>
+            </h3>
             <div className="space-y-1.5">
               {elems.map((e) => {
                 const style = elementStyles[e.type];
                 const active = selection.elementIds.has(e.id);
                 return (
                   <button
+                    type="button"
                     key={e.id}
                     onClick={() => onToggle("element", e.id)}
                     className={cn(
-                      "w-full rounded-md border p-2 text-left transition-colors",
+                      "w-full rounded-lg border p-2.5 text-left",
                       active
                         ? "border-primary/60 bg-primary/10"
                         : "border-border bg-card/40 hover:bg-accent",
                     )}
                   >
-                    <span
-                      className="text-[9px] font-semibold uppercase"
+                    <p
+                      className="label-caps"
                       style={{ color: style.color }}
                     >
                       {style.label} · {e.status}
-                    </span>
-                    <p className="text-xs font-medium">{e.title}</p>
+                    </p>
+                    <p className="text-base/7 font-medium sm:text-sm/6">
+                      {e.title}
+                    </p>
                   </button>
                 );
               })}
               {elems.length === 0 && (
-                <span className="text-[11px] text-muted-foreground">
+                <p className="text-base/7 text-muted-foreground sm:text-sm/6">
                   Nothing extracted yet — analyze a chapter to build story
                   memory.
-                </span>
+                </p>
               )}
             </div>
           </section>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, TriangleAlert, Waypoints } from "lucide-react";
+import { RiAddLine, RiAlertLine, RiRouteLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { api } from "@/lib/api";
@@ -140,7 +140,7 @@ export function StoryMap({ novelId }: { novelId: string }) {
       {/* Header */}
       <div className="flex items-center gap-3 border-b px-5 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <Waypoints className="size-4 text-primary" /> Story Map
+          <RiRouteLine className="size-4 text-primary" /> Story Map
         </div>
         <span className="text-xs text-muted-foreground">
           {slots.length} chapter{slots.length === 1 ? "" : "s"} ·{" "}
@@ -155,9 +155,9 @@ export function StoryMap({ novelId }: { novelId: string }) {
           <button
             onClick={() => setThreadFilter("open")}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] transition-colors",
+              "flex items-center gap-1.5 rounded-none px-2.5 py-1 text-[11px] transition-colors",
               overdue > 0
-                ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+                ? "bg-caution/10 text-caution hover:bg-caution/20"
                 : "text-muted-foreground hover:bg-accent",
             )}
             title={
@@ -166,14 +166,14 @@ export function StoryMap({ novelId }: { novelId: string }) {
                 : "Threads planted but not yet paid off"
             }
           >
-            {overdue > 0 && <TriangleAlert className="size-3" />}
+            {overdue > 0 && <RiAlertLine className="size-3" />}
             {overdue > 0
               ? `${overdue} overdue`
               : `${openThreads.length} open thread${openThreads.length === 1 ? "" : "s"}`}
           </button>
         )}
         <Button size="sm" className="ml-auto" onClick={() => addChapter()}>
-          <Plus className="size-4" />
+          <RiAddLine className="size-4" />
           {slots.length === 0 ? "First chapter" : "Add chapter"}
         </Button>
       </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { BookMarked, Loader2, Sparkles } from "lucide-react";
+import { RiBookMarkedLine, RiLoader4Line, RiSparkling2Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -118,7 +118,7 @@ export function StoryBible({ novelId }: { novelId: string }) {
         <header className="flex items-start justify-between gap-4">
           <div>
             <h1 className="flex items-center gap-2.5 font-heading text-2xl font-semibold tracking-tight">
-              <BookMarked className="size-6 text-primary" /> Story Bible
+              <RiBookMarkedLine className="size-6 text-primary" /> Story Bible
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
               Everything here is compiled into every AI generation for this
@@ -126,7 +126,7 @@ export function StoryBible({ novelId }: { novelId: string }) {
             </p>
           </div>
           <Button onClick={save} disabled={saving || !dirty}>
-            {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+            {saving ? <RiLoader4Line className="size-4 animate-spin" /> : null}
             {dirty ? "Save changes" : "Saved"}
           </Button>
         </header>
@@ -165,9 +165,9 @@ export function StoryBible({ novelId }: { novelId: string }) {
               disabled={suggesting}
             >
               {suggesting ? (
-                <Loader2 className="size-4 animate-spin" />
+                <RiLoader4Line className="size-4 animate-spin" />
               ) : (
-                <Sparkles className="size-4" />
+                <RiSparkling2Line className="size-4" />
               )}
               Suggest from premise
             </Button>

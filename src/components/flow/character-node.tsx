@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { Sparkles } from "lucide-react";
+import { RiSparkling2Line } from "@remixicon/react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Character } from "@/db/schema";
@@ -42,8 +42,8 @@ export const CharacterNode = memo(function CharacterNode({
   return (
     <div
       className={cn(
-        "w-52 rounded-xl border bg-card/95 p-3 shadow-md backdrop-blur transition-shadow",
-        selected ? "border-primary shadow-primary/20" : "border-border",
+        "w-52 border bg-card p-3 transition-colors",
+        selected ? "border-primary" : "border-border",
         status === "dead" && "opacity-60 grayscale",
       )}
       title={
@@ -64,7 +64,7 @@ export const CharacterNode = memo(function CharacterNode({
       />
       <div className="flex items-center gap-2.5">
         <div
-          className="flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          className="flex size-9 shrink-0 items-center justify-center rounded-none text-xs font-bold text-white"
           style={{ backgroundColor: c.color }}
         >
           {initials(c.name)}
@@ -73,7 +73,7 @@ export const CharacterNode = memo(function CharacterNode({
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{c.name}</span>
             {c.origin === "ai" && (
-              <Sparkles className="size-3 shrink-0 text-primary" />
+              <RiSparkling2Line className="size-3 shrink-0 text-primary" />
             )}
           </div>
           <Badge

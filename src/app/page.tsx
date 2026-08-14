@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { BookOpen, Plus, Trash2 } from "lucide-react";
+import { RiAddLine, RiBookOpenLine, RiDeleteBinLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,28 +12,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { api } from "@/lib/api";
 import type { Novel } from "@/db/schema";
 
 export default function HomePage() {
   const [novels, setNovels] = useState<Novel[] | null>(null);
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [premise, setPremise] = useState("");
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     api
@@ -44,22 +29,6 @@ export default function HomePage() {
         setNovels([]);
       });
   }, []);
-
-  async function createNovel() {
-    if (!title.trim()) return;
-    setCreating(true);
-    try {
-      const novel = await api.post<Novel>("/api/novels", { title, premise });
-      setNovels((n) => [novel, ...(n ?? [])]);
-      setOpen(false);
-      setTitle("");
-      setPremise("");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setCreating(false);
-    }
-  }
 
   async function deleteNovel(id: string) {
     try {
@@ -75,54 +44,20 @@ export default function HomePage() {
       <div className="mb-10 flex items-end justify-between">
         <div>
           <h1 className="flex items-center gap-3 font-heading text-3xl font-semibold tracking-tight">
-            <BookOpen className="size-8 text-primary" /> StoryForge
+            <RiBookOpenLine className="size-8 text-primary" /> StoryForge
           </h1>
           <p className="mt-2 text-muted-foreground">
             Your AI-assisted novel writing studio.
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="size-4" /> New Novel
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>New Novel</DialogTitle>
-              <DialogDescription>
-                The premise anchors every AI generation for this novel — make
-                it count.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="The Hollow Crown"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="premise">Premise</Label>
-                <Textarea
-                  id="premise"
-                  rows={5}
-                  value={premise}
-                  onChange={(e) => setPremise(e.target.value)}
-                  placeholder="A disgraced cartographer discovers the kingdom's maps have been lying about an entire province..."
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={createNovel} disabled={creating || !title.trim()}>
-                {creating ? "Creating..." : "Create"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Button asChild>
+            <Link href="/novels/new">
+              <RiAddLine className="size-4" /> New Novel
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {novels === null ? (
@@ -132,8 +67,16 @@ export default function HomePage() {
         </div>
       ) : novels.length === 0 ? (
         <Card className="border-dashed">
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No novels yet. Create your first one to start building your world.
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            <p className="text-muted-foreground">
+              No novels yet. The first step is describing one — the AI takes it
+              from there.
+            </p>
+            <Button asChild variant="secondary">
+              <Link href="/novels/new">
+                <RiAddLine className="size-4" /> Start your first novel
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -168,7 +111,7 @@ export default function HomePage() {
                     deleteNovel(novel.id);
                   }}
                 >
-                  <Trash2 className="size-4" />
+                  <RiDeleteBinLine className="size-4" />
                 </Button>
               </CardContent>
             </Card>

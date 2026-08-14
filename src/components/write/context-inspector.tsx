@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Database, Eye, Loader2 } from "lucide-react";
+import { RiDatabase2Line, RiEyeLine, RiLoader4Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -98,7 +98,9 @@ export function ContextInspector({
   }, [novelId, chapterId, characterIds, locationIds, elementIds]);
 
   useEffect(() => {
-    if (open) load();
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => void load());
+    return () => window.cancelAnimationFrame(frame);
   }, [open, load]);
 
   async function reindex() {
@@ -134,7 +136,7 @@ export function ContextInspector({
       <SheetContent className="flex w-[640px] flex-col gap-0 sm:max-w-[640px]">
         <SheetHeader className="border-b">
           <SheetTitle className="flex items-center gap-2">
-            <Eye className="size-4 text-primary" /> What the AI sees
+            <RiEyeLine className="size-4 text-primary" /> What the AI sees
           </SheetTitle>
           <SheetDescription>
             The compiled context for your current selection, exactly as the
@@ -144,7 +146,7 @@ export function ContextInspector({
 
         {loading && !context ? (
           <div className="flex flex-1 items-center justify-center">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            <RiLoader4Line className="size-5 animate-spin text-muted-foreground" />
           </div>
         ) : !context ? null : (
           <Tabs defaultValue="breakdown" className="flex min-h-0 flex-1 flex-col">
@@ -157,17 +159,17 @@ export function ContextInspector({
                   of {context.budget.toLocaleString()} budget
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-1.5 overflow-hidden rounded-none bg-muted">
                 <div
                   className={cn(
-                    "h-full rounded-full transition-all",
-                    usedPct > 90 ? "bg-amber-500" : "bg-primary",
+                    "h-full rounded-none transition-all",
+                    usedPct > 90 ? "bg-caution" : "bg-primary",
                   )}
                   style={{ width: `${usedPct}%` }}
                 />
               </div>
               {totalOmitted > 0 && (
-                <p className="text-[11px] text-amber-500">
+                <p className="text-[11px] text-caution">
                   {totalOmitted} item(s) were left out to stay within budget.
                   Select what matters for this scene to pull it back in.
                 </p>
@@ -176,7 +178,7 @@ export function ContextInspector({
               <div className="flex items-center justify-between gap-3 rounded-md border bg-card/50 px-3 py-2">
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 text-xs font-medium">
-                    <Database className="size-3 text-primary" /> Canon retrieval
+                    <RiDatabase2Line className="size-3 text-primary" /> Canon retrieval
                   </p>
                   <p className="text-[11px] text-muted-foreground">
                     {context.retrievedCount > 0
@@ -195,7 +197,7 @@ export function ContextInspector({
                   onClick={reindex}
                 >
                   {indexing ? (
-                    <Loader2 className="size-4 animate-spin" />
+                    <RiLoader4Line className="size-4 animate-spin" />
                   ) : null}
                   Index
                 </Button>
@@ -218,7 +220,7 @@ export function ContextInspector({
                     <span className="flex items-center gap-3 text-muted-foreground">
                       <span>{s.included} in</span>
                       {s.omitted > 0 && (
-                        <span className="text-amber-500">
+                        <span className="text-caution">
                           {s.omitted} omitted
                         </span>
                       )}

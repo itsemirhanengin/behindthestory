@@ -16,6 +16,8 @@ import { sql } from "drizzle-orm";
 
 export const POV_VALUES = ["first", "third_limited", "third_omniscient"] as const;
 export const TENSE_VALUES = ["past", "present"] as const;
+export const AI_SUGGESTION_DECISIONS = ["accepted", "rejected"] as const;
+export const AI_SUGGESTION_MODES = ["insert", "replace"] as const;
 
 export const REL_TYPE_VALUES = [
   "family",
@@ -88,7 +90,7 @@ export const characters = pgTable(
     origin: text("origin", { enum: ["user", "ai"] })
       .notNull()
       .default("user"),
-    color: text("color").notNull().default("#8b5cf6"),
+    color: text("color").notNull().default("#8c3a2b"),
     posX: real("pos_x").notNull().default(0),
     posY: real("pos_y").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -478,6 +480,45 @@ export const aiGenerations = pgTable(
   (t) => [index("ai_generations_novel_idx").on(t.novelId)],
 );
 
+/**
+ * One row per author decision on an AI prose suggestion. Rating and comment
+ * remain nullable because most decisions are sampled rather than interrupted.
+ */
+export const aiSuggestionFeedback = pgTable(
+  "ai_suggestion_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    suggestionId: uuid("suggestion_id").notNull().unique(),
+    novelId: uuid("novel_id")
+      .notNull()
+      .references(() => novels.id, { onDelete: "cascade" }),
+    chapterId: uuid("chapter_id").references(() => chapters.id, {
+      onDelete: "set null",
+    }),
+    decision: text("decision", { enum: AI_SUGGESTION_DECISIONS }).notNull(),
+    mode: text("mode", { enum: AI_SUGGESTION_MODES }).notNull(),
+    route: text("route").notNull(),
+    label: text("label").notNull(),
+    suggestionText: text("suggestion_text").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    feedbackPrompted: boolean("feedback_prompted").notNull().default(false),
+    rating: integer("rating"),
+    comment: text("comment"),
+    decidedAt: timestamp("decided_at").notNull().defaultNow(),
+    feedbackSubmittedAt: timestamp("feedback_submitted_at"),
+  },
+  (t) => [
+    index("ai_suggestion_feedback_novel_idx").on(t.novelId),
+    index("ai_suggestion_feedback_chapter_idx").on(t.chapterId),
+    index("ai_suggestion_feedback_decision_idx").on(t.novelId, t.decision),
+    check(
+      "ai_suggestion_feedback_rating_range",
+      sql`${t.rating} is null or (${t.rating} >= 1 and ${t.rating} <= 5)`,
+    ),
+  ],
+);
+
 export type Novel = typeof novels.$inferSelect;
 export type Character = typeof characters.$inferSelect;
 export type Relationship = typeof relationships.$inferSelect;
@@ -493,3 +534,4 @@ export type CharacterFact = typeof characterFacts.$inferSelect;
 export type ChapterRevision = typeof chapterRevisions.$inferSelect;
 export type CanonChunk = typeof canonChunks.$inferSelect;
 export type AiGeneration = typeof aiGenerations.$inferSelect;
+export type AiSuggestionFeedback = typeof aiSuggestionFeedback.$inferSelect;

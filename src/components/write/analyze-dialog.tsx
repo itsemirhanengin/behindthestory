@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Check, Loader2, ScanSearch } from "lucide-react";
+import { RiCheckLine, RiLoader4Line, RiSearchEyeLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -88,7 +88,7 @@ function ImpactChip({ impact }: { impact: EventImpact }) {
   return (
     <span
       className={cn(
-        "rounded-full border px-1.5 text-[10px] capitalize",
+        "rounded-none border px-1.5 text-[10px] capitalize",
         impactStyles[impact],
       )}
     >
@@ -122,7 +122,7 @@ function SuggestionRow({
           checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground",
         )}
       >
-        {checked && <Check className="size-3" />}
+        {checked && <RiCheckLine className="size-3" />}
       </span>
       <div className="min-w-0 flex-1 text-sm">{children}</div>
     </button>
@@ -256,7 +256,7 @@ export function AnalyzeDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ScanSearch className="size-4 text-primary" /> Analyze Chapter
+            <RiSearchEyeLine className="size-4 text-primary" /> Analyze Chapter
           </DialogTitle>
           <DialogDescription>
             The AI reads this chapter and proposes story-memory updates. Untick
@@ -268,7 +268,7 @@ export function AnalyzeDialog({
           <Button onClick={run} disabled={busy} className="w-full">
             {busy ? (
               <>
-                <Loader2 className="size-4 animate-spin" /> Reading the
+                <RiLoader4Line className="size-4 animate-spin" /> Reading the
                 chapter...
               </>
             ) : (
@@ -386,7 +386,7 @@ export function AnalyzeDialog({
                               {ru.newType} · {Math.round(ru.closeness)}/10
                             </span>
                             {turned && (
-                              <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+                              <span className="ml-1.5 rounded-none bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
                                 turn
                               </span>
                             )}
@@ -421,7 +421,7 @@ export function AnalyzeDialog({
                           <span className="font-medium">
                             {nameOf(cs.characterId)}
                           </span>
-                          <span className="text-xs capitalize text-rose-400">
+                          <span className="text-xs capitalize text-alarm">
                             {cs.newStatus}
                           </span>
                           <ImpactChip impact={cs.impact} />
@@ -504,9 +504,9 @@ export function AnalyzeDialog({
               </Button>
               <Button onClick={apply} disabled={applying}>
                 {applying ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <RiLoader4Line className="size-4 animate-spin" />
                 ) : (
-                  <Check className="size-4" />
+                  <RiCheckLine className="size-4" />
                 )}
                 Apply {total - rejected.size}/{total}
               </Button>

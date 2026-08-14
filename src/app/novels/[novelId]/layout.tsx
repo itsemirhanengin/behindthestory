@@ -1,4 +1,5 @@
 import { NovelSidebar } from "@/components/novel-sidebar";
+import { NovelWorkspaceProvider } from "@/components/novel-workspace";
 
 export default async function NovelLayout({
   children,
@@ -6,9 +7,11 @@ export default async function NovelLayout({
 }: LayoutProps<"/novels/[novelId]">) {
   const { novelId } = await params;
   return (
-    <div className="flex h-dvh w-full overflow-hidden">
-      <NovelSidebar novelId={novelId} />
-      <main className="min-w-0 flex-1">{children}</main>
-    </div>
+    <NovelWorkspaceProvider>
+      <div className="isolate flex h-dvh w-full overflow-hidden">
+        <NovelSidebar novelId={novelId} />
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
+    </NovelWorkspaceProvider>
   );
 }

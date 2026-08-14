@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Trash2 } from "lucide-react";
+import { RiDeleteBinLine, RiLoader4Line, RiSparkling2Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -187,18 +187,18 @@ export function LocationSheet({
 
         <div className="flex items-center gap-2 border-t p-4">
           <Button onClick={save} disabled={saving} className="flex-1">
-            {saving ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+            {saving ? <RiLoader4Line className="size-4 animate-spin" /> : "Save"}
           </Button>
           <Button variant="secondary" onClick={fillWithAI} disabled={aiBusy}>
             {aiBusy ? (
-              <Loader2 className="size-4 animate-spin" />
+              <RiLoader4Line className="size-4 animate-spin" />
             ) : (
-              <Sparkles className="size-4" />
+              <RiSparkling2Line className="size-4" />
             )}
             Fill with AI
           </Button>
           <Button variant="ghost" size="icon" onClick={remove}>
-            <Trash2 className="size-4 text-destructive" />
+            <RiDeleteBinLine className="size-4 text-destructive" />
           </Button>
         </div>
       </SheetContent>

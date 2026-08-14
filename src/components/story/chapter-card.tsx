@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import {
-  CornerDownRight,
-  GitBranch,
-  MoreHorizontal,
-  PenLine,
-  Scissors,
-  Trash2,
-} from "lucide-react";
+  RiCornerDownRightLine,
+  RiDeleteBinLine,
+  RiEditLine,
+  RiGitBranchLine,
+  RiMoreLine,
+  RiScissorsLine,
+} from "@remixicon/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,9 +86,9 @@ export function ChapterCard({
         <div className="relative z-20 flex items-center gap-1">
           <span
             className={cn(
-              "size-1.5 rounded-full",
+              "size-1.5 rounded-none",
               chapter.status === "final"
-                ? "bg-emerald-500"
+                ? "bg-affirm"
                 : "bg-muted-foreground/40",
             )}
             title={chapter.status}
@@ -96,25 +96,25 @@ export function ChapterCard({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="size-5">
-                <MoreHorizontal className="size-3.5" />
+                <RiMoreLine className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem onClick={onAddVariant}>
-                <GitBranch className="size-4" /> New variant
+                <RiGitBranchLine className="size-4" /> New variant
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onInsertAfter}>
-                <CornerDownRight className="size-4" /> Insert chapter after
+                <RiCornerDownRightLine className="size-4" /> Insert chapter after
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onToggleContinues}>
-                <Scissors className="size-4" />
+                <RiScissorsLine className="size-4" />
                 {chapter.continuesFromPrevious
                   ? "Start fresh here"
                   : "Continue from previous"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                <Trash2 className="size-4" /> Delete chapter
+                <RiDeleteBinLine className="size-4" /> Delete chapter
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -140,7 +140,7 @@ export function ChapterCard({
             <span
               key={c.id}
               title={c.name}
-              className="flex size-4 items-center justify-center rounded-full text-[8px] font-semibold text-white"
+              className="flex size-4 items-center justify-center rounded-none text-[8px] font-semibold text-white"
               style={{ backgroundColor: c.color }}
             >
               {c.name
@@ -186,7 +186,7 @@ export function ChapterCard({
         </span>
         {/* Affordance only — the card itself is the link. */}
         <span className="flex items-center gap-1 text-[11px] text-muted-foreground transition-colors group-hover:text-primary">
-          <PenLine className="size-3" /> Write
+          <RiEditLine className="size-3" /> Write
         </span>
       </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { RiArrowLeftSLine, RiArrowRightSLine, RiTimeLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
@@ -45,18 +45,18 @@ export function ChapterScrubber({
   return (
     <div
       className={cn(
-        "flex w-[26rem] flex-col gap-1.5 rounded-xl border bg-card/90 px-3 py-2 shadow-md backdrop-blur",
+        "flex w-[26rem] flex-col gap-1.5 rounded-xl border bg-card px-3 py-2",
         className,
       )}
     >
       <div className="flex items-center gap-1.5">
-        <Clock className="size-3.5 shrink-0 text-primary" />
+        <RiTimeLine className="size-3.5 shrink-0 text-primary" />
         <span className="text-xs font-medium">
           Chapter {value}
           <span className="text-muted-foreground"> / {max}</span>
         </span>
         {atLatest && (
-          <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+          <span className="rounded-none bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
             latest
           </span>
         )}
@@ -69,7 +69,7 @@ export function ChapterScrubber({
             onClick={() => jump(-1)}
             disabled={value <= 1}
           >
-            <ChevronLeft className="size-3.5" />
+            <RiArrowLeftSLine className="size-3.5" />
           </Button>
           <Button
             size="icon"
@@ -79,7 +79,7 @@ export function ChapterScrubber({
             onClick={() => jump(1)}
             disabled={atLatest}
           >
-            <ChevronRight className="size-3.5" />
+            <RiArrowRightSLine className="size-3.5" />
           </Button>
           <Button
             size="sm"

@@ -2,7 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, Loader2, PenLine, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  RiAddLine,
+  RiCheckLine,
+  RiDeleteBinLine,
+  RiEditLine,
+  RiLoader4Line,
+  RiSparkling2Line,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -44,11 +51,6 @@ export function PlanPanel({
   const [beats, setBeats] = useState<Beat[]>(chapter.beats);
   const [planning, setPlanning] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setOutline(chapter.outline);
-    setBeats(chapter.beats);
-  }, [chapter.id, chapter.outline, chapter.beats]);
 
   useEffect(() => {
     return () => {
@@ -114,7 +116,7 @@ export function PlanPanel({
         },
       );
       onChapterUpdate(updated);
-      toast.success("Chapter planned — edit the beats, then write them");
+      toast.success("Chapter planned — review the beats before writing");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -127,12 +129,13 @@ export function PlanPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="space-y-2 border-b p-3">
-        <h3 className="text-sm font-semibold">Chapter plan</h3>
-        <p className="text-[11px] leading-snug text-muted-foreground">
-          Beats are sent to the AI with every generation. Writing one beat at a
-          time gives far more control than generating a whole chapter blind.
+        <h2 className="text-sm font-medium">Chapter plan</h2>
+        <p className="text-base/7 text-muted-foreground sm:text-sm/6">
+          Keep the chapter&apos;s purpose and beats close while you write. AI uses
+          them automatically when it prepares a suggestion.
         </p>
         <Button
+          type="button"
           size="sm"
           variant="secondary"
           className="w-full"
@@ -141,11 +144,11 @@ export function PlanPanel({
         >
           {planning ? (
             <>
-              <Loader2 className="size-4 animate-spin" /> Planning...
+              <RiLoader4Line className="size-4 animate-spin" /> Planning...
             </>
           ) : (
             <>
-              <Sparkles className="size-4" />
+              <RiSparkling2Line className="size-4" />
               {beats.length ? "Re-plan chapter" : "Plan with AI"}
             </>
           )}
@@ -155,27 +158,30 @@ export function PlanPanel({
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-4 p-3">
           <div className="space-y-1.5">
-            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="label-caps">
               What this chapter is for
-            </h4>
+            </h3>
             <Textarea
+              name="chapter-purpose"
+              aria-label="Chapter purpose"
               rows={3}
               value={outline}
               onChange={(e) => updateOutline(e.target.value)}
               placeholder="Two or three sentences on the job this chapter does."
-              className="text-xs"
+              className="text-base/7 sm:text-sm/6"
             />
           </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="label-caps tabular-nums">
                 Beats ({beats.filter((b) => b.done).length}/{beats.length})
-              </h4>
+              </h3>
               <Button
+                type="button"
                 size="sm"
                 variant="ghost"
-                className="h-6 px-1.5 text-[11px]"
+                className="h-7"
                 onClick={() =>
                   updateBeats([
                     ...beats,
@@ -183,12 +189,12 @@ export function PlanPanel({
                   ])
                 }
               >
-                <Plus className="size-3" /> Add
+                <RiAddLine className="size-3" /> Add
               </Button>
             </div>
 
             {beats.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-base/7 text-muted-foreground sm:text-sm/6">
                 No beats yet. Plan the chapter, or add them yourself.
               </p>
             ) : (
@@ -199,17 +205,18 @@ export function PlanPanel({
                     className={cn(
                       "group rounded-md border p-2 transition-colors",
                       beat.done
-                        ? "border-emerald-500/30 bg-emerald-500/5"
+                        ? "border-affirm/30 bg-affirm/5"
                         : "border-border bg-card/40",
                     )}
                   >
                     <div className="flex items-start gap-2">
                       <button
+                        type="button"
                         title={beat.done ? "Mark as unwritten" : "Mark as written"}
                         className={cn(
                           "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
                           beat.done
-                            ? "border-emerald-500 bg-emerald-500 text-white"
+                            ? "border-affirm bg-affirm text-white"
                             : "border-muted-foreground",
                         )}
                         onClick={() =>
@@ -220,13 +227,15 @@ export function PlanPanel({
                           )
                         }
                       >
-                        {beat.done && <Check className="size-3" />}
+                        {beat.done && <RiCheckLine className="size-3" />}
                       </button>
                       <Textarea
+                        name={`beat-${beat.id}`}
+                        aria-label={`Beat ${i + 1}`}
                         rows={2}
                         value={beat.text}
                         placeholder={`Beat ${i + 1}`}
-                        className="min-h-0 resize-none border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0"
+                        className="min-h-0 resize-none border-0 bg-transparent p-0 text-base/7 shadow-none focus-visible:ring-0 sm:text-sm/6"
                         onChange={(e) =>
                           updateBeats(
                             beats.map((b) =>
@@ -238,23 +247,26 @@ export function PlanPanel({
                         }
                       />
                       <button
+                        type="button"
+                        aria-label={`Delete beat ${i + 1}`}
                         className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                         onClick={() =>
                           updateBeats(beats.filter((b) => b.id !== beat.id))
                         }
                       >
-                        <Trash2 className="size-3" />
+                        <RiDeleteBinLine className="size-3" />
                       </button>
                     </div>
                     {!beat.done && beat.text.trim() && (
                       <Button
+                        type="button"
                         size="sm"
                         variant="ghost"
-                        className="mt-1.5 h-6 w-full px-1.5 text-[11px]"
+                        className="mt-1.5 w-full"
                         disabled={disabled}
                         onClick={() => onWriteBeat(beat)}
                       >
-                        <PenLine className="size-3" /> Write this beat
+                        <RiEditLine className="size-3" /> Write this beat
                       </Button>
                     )}
                   </div>
@@ -268,12 +280,13 @@ export function PlanPanel({
       {nextUnwritten && (
         <div className="border-t p-3">
           <Button
+            type="button"
             size="sm"
             className="w-full"
             disabled={disabled || !nextUnwritten.text.trim()}
             onClick={() => onWriteBeat(nextUnwritten)}
           >
-            <PenLine className="size-4" /> Write next beat
+            <RiEditLine className="size-4" /> Write next beat
           </Button>
         </div>
       )}

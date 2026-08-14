@@ -27,14 +27,14 @@ export type RelationshipEdgeType = Edge<
 >;
 
 export const relationshipColors: Record<RelType, string> = {
-  family: "#f59e0b",
-  romance: "#ec4899",
-  friendship: "#22c55e",
-  rivalry: "#f97316",
-  mentor: "#3b82f6",
-  enemy: "#ef4444",
-  ally: "#14b8a6",
-  other: "#71717a",
+  family: "#b07d48", // ochre
+  romance: "#a34a5e", // dusty rose
+  friendship: "#5c6e4a", // olive
+  rivalry: "#8c4a2b", // burnt sienna
+  mentor: "#3f5e6b", // slate teal
+  enemy: "#8c2f2f", // deep red
+  ally: "#4a6b5c", // sage
+  other: "#7a736a", // warm grey
 };
 
 export const RelationshipEdge = memo(function RelationshipEdge({
@@ -75,7 +75,7 @@ export const RelationshipEdge = memo(function RelationshipEdge({
       />
       <EdgeLabelRenderer>
         <div
-          className="nodrag nopan pointer-events-auto absolute flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur transition-transform hover:scale-110"
+          className="nodrag nopan pointer-events-auto absolute flex cursor-pointer items-center gap-1 rounded-none border bg-card px-2 py-0.5 text-[10px] font-medium transition-transform hover:scale-110"
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
             borderColor: color,

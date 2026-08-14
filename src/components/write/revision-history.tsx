@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { History, Loader2, RotateCcw, Save } from "lucide-react";
+import {
+  RiHistoryLine,
+  RiLoader4Line,
+  RiRefreshLine,
+  RiSaveLine,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -108,7 +113,7 @@ export function RevisionHistory({
       <SheetContent className="flex w-[520px] flex-col gap-0 sm:max-w-[520px]">
         <SheetHeader className="border-b">
           <SheetTitle className="flex items-center gap-2">
-            <History className="size-4 text-primary" /> Revision history
+            <RiHistoryLine className="size-4 text-primary" /> Revision history
           </SheetTitle>
           <SheetDescription>
             A snapshot is taken automatically before every AI write, so nothing
@@ -139,7 +144,7 @@ export function RevisionHistory({
               }
             }}
           >
-            <Save className="size-4" /> Save current version
+            <RiSaveLine className="size-4" /> Save current version
           </Button>
         </SheetHeader>
 
@@ -201,9 +206,9 @@ export function RevisionHistory({
                   onClick={() => restore(previewId)}
                 >
                   {busy ? (
-                    <Loader2 className="size-4 animate-spin" />
+                    <RiLoader4Line className="size-4 animate-spin" />
                   ) : (
-                    <RotateCcw className="size-4" />
+                    <RiRefreshLine className="size-4" />
                   )}
                   Restore this version
                 </Button>

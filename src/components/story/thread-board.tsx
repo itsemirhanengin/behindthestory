@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, TriangleAlert } from "lucide-react";
+import { RiAlertLine, RiCheckLine } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { elementStyles } from "@/components/flow/element-node";
 import type { StoryElement } from "@/db/schema";
@@ -80,7 +80,7 @@ function SpanBar({
         />
       )}
       <div
-        className="absolute top-1/2 h-0.5 -translate-y-1/2 rounded-full"
+        className="absolute top-1/2 h-0.5 -translate-y-1/2 rounded-none"
         style={{
           left: `${left}%`,
           width: `${Math.max(right - left, 1)}%`,
@@ -90,7 +90,7 @@ function SpanBar({
         }}
       />
       <span
-        className="absolute top-1/2 size-1.5 -translate-y-1/2 rounded-full"
+        className="absolute top-1/2 size-1.5 -translate-y-1/2 rounded-none"
         style={{ left: `${left}%`, backgroundColor: color }}
       />
       {!open && (
@@ -139,7 +139,7 @@ function ThreadRow({
           style={{ color: style.color }}
         >
           <span
-            className="size-1.5 shrink-0 rounded-full"
+            className="size-1.5 shrink-0 rounded-none"
             style={{ backgroundColor: style.color }}
           />
           <span className="truncate">{style.label}</span>
@@ -161,14 +161,14 @@ function ThreadRow({
             className={cn(
               "flex items-center justify-end gap-1 text-[11px] font-medium",
               stale
-                ? "text-amber-500"
+                ? "text-caution"
                 : open
                   ? "text-muted-foreground"
-                  : "text-emerald-400",
+                  : "text-affirm",
             )}
           >
-            {stale && <TriangleAlert className="size-3 shrink-0" />}
-            {!open && <Check className="size-3 shrink-0" />}
+            {stale && <RiAlertLine className="size-3 shrink-0" />}
+            {!open && <RiCheckLine className="size-3 shrink-0" />}
             {open
               ? openFor === 0
                 ? "just planted"
@@ -249,7 +249,7 @@ export function ThreadBoard({
                 key={chip.key}
                 onClick={() => onFilterChange(chip.key)}
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[11px] transition-colors",
+                  "rounded-none px-2 py-0.5 text-[11px] transition-colors",
                   filter === chip.key
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:bg-accent/50",

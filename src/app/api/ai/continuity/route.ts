@@ -6,7 +6,7 @@ import { buildSceneContext } from "@/lib/scene-context";
 
 export const maxDuration = 300;
 
-export const ISSUE_TYPES = [
+const ISSUE_TYPES = [
   "contradiction",
   "continuity",
   "voice",

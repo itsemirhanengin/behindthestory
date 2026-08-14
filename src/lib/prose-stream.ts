@@ -8,9 +8,17 @@ import type { TextStreamPart, ToolSet } from "ai";
 export type ProseStreamEvent =
   | { t: "d"; v: string }
   | { t: "e"; v: string }
+  | { t: "s"; v: ProsePhase; detail?: string }
   | { t: "f"; inputTokens: number; outputTokens: number };
 
 export type ProseUsage = { inputTokens: number; outputTokens: number };
+export type ProsePhase = "context" | "model" | "writing";
+
+type ProseStreamSource =
+  | AsyncIterable<TextStreamPart<ToolSet>>
+  | ((helpers: {
+      status: (phase: ProsePhase, detail?: string) => void;
+    }) => Promise<AsyncIterable<TextStreamPart<ToolSet>>>);
 
 function describeError(error: unknown): string {
   const message =
@@ -33,7 +41,7 @@ function describeError(error: unknown): string {
 // ---------------------------------------------------------------------------
 
 export function proseStreamResponse(
-  fullStream: AsyncIterable<TextStreamPart<ToolSet>>,
+  source: ProseStreamSource,
   opts: { onFinish?: (usage: ProseUsage) => void | Promise<void> } = {},
 ): Response {
   const encoder = new TextEncoder();
@@ -49,8 +57,17 @@ export function proseStreamResponse(
         }
       };
       try {
+        const status = (phase: ProsePhase, detail?: string) =>
+          send({ t: "s", v: phase, detail });
+        const fullStream =
+          typeof source === "function" ? await source({ status }) : source;
+        let writing = false;
         for await (const part of fullStream) {
           if (part.type === "text-delta") {
+            if (!writing) {
+              writing = true;
+              status("writing");
+            }
             send({ t: "d", v: part.text });
           } else if (part.type === "error") {
             console.error("[ai] stream error", part.error);
@@ -95,6 +112,7 @@ export async function consumeProseStream(
   res: Response,
   handlers: {
     onDelta: (text: string) => void;
+    onStatus?: (phase: ProsePhase, detail?: string) => void;
     onUsage?: (usage: ProseUsage) => void;
   },
 ): Promise<void> {
@@ -121,6 +139,8 @@ export async function consumeProseStream(
     if (event.t === "d") {
       sawText = true;
       handlers.onDelta(event.v);
+    } else if (event.t === "s") {
+      handlers.onStatus?.(event.v, event.detail);
     } else if (event.t === "e") {
       failure = event.v;
     } else if (event.t === "f") {

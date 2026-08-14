@@ -15,7 +15,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { toast } from "sonner";
-import { Network, Plus, Sparkles } from "lucide-react";
+import { RiAddLine, RiMindMap, RiSparkling2Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import {
@@ -245,7 +245,9 @@ export function CharactersCanvas({ novelId }: { novelId: string }) {
         onEdgeClick={onEdgeClick}
         onNodeDragStop={onNodeDragStop}
         fitView
-        colorMode="dark"
+        // The palette comes from our tokens (see `.react-flow` in globals.css);
+        // "dark" here would let React Flow re-theme this subtree.
+        colorMode="light"
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={null}
       >
@@ -263,13 +265,13 @@ export function CharactersCanvas({ novelId }: { novelId: string }) {
 
       <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
         <div className="mr-2 flex items-center gap-2 text-sm font-semibold">
-          <Network className="size-4 text-primary" /> Characters
+          <RiMindMap className="size-4 text-primary" /> Characters
         </div>
         <Button size="sm" onClick={addCharacter}>
-          <Plus className="size-4" /> Add Character
+          <RiAddLine className="size-4" /> Add Character
         </Button>
         <Button size="sm" variant="secondary" onClick={() => setAiCharOpen(true)}>
-          <Sparkles className="size-4" /> Suggest Character
+          <RiSparkling2Line className="size-4" /> Suggest Character
         </Button>
         <Button
           size="sm"
@@ -277,7 +279,7 @@ export function CharactersCanvas({ novelId }: { novelId: string }) {
           onClick={() => setInferOpen(true)}
           disabled={characters.length < 2}
         >
-          <Sparkles className="size-4" /> Infer Relationships
+          <RiSparkling2Line className="size-4" /> Infer Relationships
         </Button>
       </div>
 
@@ -289,7 +291,7 @@ export function CharactersCanvas({ novelId }: { novelId: string }) {
           onChange={setAsOf}
         />
         {hiddenBonds > 0 && (
-          <p className="rounded-md bg-card/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur">
+          <p className="border bg-card px-2 py-1 text-[11px] text-muted-foreground">
             {hiddenBonds} bond{hiddenBonds > 1 ? "s" : ""} not formed yet at this
             chapter
           </p>

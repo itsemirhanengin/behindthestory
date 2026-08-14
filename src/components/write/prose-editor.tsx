@@ -5,66 +5,156 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useRef,
+  useMemo,
   useState,
 } from "react";
-import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import { Extension } from "@tiptap/core";
+import UniqueID from "@tiptap/extension-unique-id";
+import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
-import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { type Node as ProseMirrorNode } from "@tiptap/pm/model";
+import {
+  Plugin,
+  PluginKey,
+  TextSelection,
+  type Transaction,
+} from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import StarterKit from "@tiptap/starter-kit";
+import { RiBold, RiItalic } from "@remixicon/react";
 
-export type MentionItem = {
-  kind: "character" | "location" | "element";
-  id: string;
-  label: string;
+import { Button } from "@/components/ui/button";
+import { BlockEditorControls } from "@/components/write/block-editor-controls";
+import {
+  BlockSelection,
+  blockSelectionKey,
+  type BlockSelectionMeta,
+} from "@/components/write/block-selection";
+
+export type SuggestionMode = "insert" | "replace";
+
+export type SuggestionContext = {
+  before: string;
+  text: string;
+  after: string;
 };
 
+type TrackedSuggestion = {
+  from: number;
+  to: number;
+  mode: SuggestionMode;
+};
+
+type SuggestionMeta =
+  | { type: "set"; value: TrackedSuggestion }
+  | { type: "clear" };
+
+const suggestionKey = new PluginKey<TrackedSuggestion | null>(
+  "storyforge-ai-suggestion",
+);
+
+const SuggestionRange = Extension.create({
+  name: "storyforgeSuggestionRange",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<TrackedSuggestion | null>({
+        key: suggestionKey,
+        state: {
+          init: () => null,
+          apply(transaction, previous) {
+            const meta = transaction.getMeta(suggestionKey) as
+              | SuggestionMeta
+              | undefined;
+            if (meta?.type === "clear") return null;
+            if (meta?.type === "set") return meta.value;
+            if (!previous || !transaction.docChanged) return previous;
+
+            const collapsed = previous.from === previous.to;
+            const from = transaction.mapping.map(previous.from, 1);
+            const to = collapsed
+              ? from
+              : transaction.mapping.map(previous.to, -1);
+
+            if (from < 0 || to < from || to > transaction.doc.content.size) {
+              return null;
+            }
+            return { ...previous, from, to };
+          },
+        },
+        props: {
+          decorations(state) {
+            const tracked = suggestionKey.getState(state);
+            if (!tracked) return null;
+
+            if (tracked.from === tracked.to) {
+              return DecorationSet.create(state.doc, [
+                Decoration.widget(
+                  tracked.from,
+                  () => {
+                    const marker = document.createElement("span");
+                    marker.className = "ai-suggestion-anchor";
+                    marker.setAttribute("aria-hidden", "true");
+                    return marker;
+                  },
+                  { key: "storyforge-ai-anchor", side: -1 },
+                ),
+              ]);
+            }
+
+            return DecorationSet.create(state.doc, [
+              Decoration.inline(tracked.from, tracked.to, {
+                class: "ai-suggestion-target",
+                "data-ai-suggestion": "true",
+              }),
+            ]);
+          },
+        },
+      }),
+    ];
+  },
+});
+
 export type ProseEditorHandle = {
-  /** Current document serialized as Markdown. */
   getMarkdown: () => string;
-  /** Replaces the whole document. Used when loading a chapter. */
   setMarkdown: (markdown: string) => void;
-  /** The selected passage plus the prose on either side, for inline edits. */
-  getSelectionContext: () => {
-    before: string;
-    text: string;
-    after: string;
-  } | null;
-  focus: () => void;
-  /** Selects and scrolls to a verbatim passage. Returns false if not found. */
+  getSelectionContext: () => SuggestionContext | null;
+  hasSelection: () => boolean;
+  focus: (position?: "current" | "end") => void;
   highlightQuote: (quote: string) => boolean;
-  /** Streaming: append a fresh region at the end of the document. */
-  beginAppendStream: () => void;
-  /** Streaming: replace the current selection with generated prose. */
-  beginReplaceStream: () => void;
-  pushStreamDelta: (text: string) => void;
-  /** Commits the streamed region, re-parsing it as Markdown. */
-  endStream: () => void;
+  startSuggestion: (
+    mode: SuggestionMode,
+    options?: { atEnd?: boolean },
+  ) => SuggestionContext | null;
+  acceptSuggestion: (markdown: string) => boolean;
+  discardSuggestion: () => void;
 };
 
 type Props = {
-  /** Only used to seed the document; further updates go through the handle. */
   initialMarkdown: string;
   editable: boolean;
   placeholder?: string;
   onChange: () => void;
-  mentionSource: () => MentionItem[];
-  onMention: (item: MentionItem) => void;
-  /** Rendered inside the selection bubble menu. */
   bubbleActions?: React.ReactNode;
+  showBubbleMenu?: boolean;
 };
 
-/** Splits streamed text into paragraph nodes without parsing Markdown yet. */
-function plainParagraphs(text: string) {
-  const blocks = text.split(/\n{2,}/);
-  return blocks.map((block) => {
-    const line = block.replace(/\n/g, " ");
-    return line
-      ? { type: "paragraph", content: [{ type: "text", text: line }] }
-      : { type: "paragraph" };
-  });
+function contextForRange(
+  doc: ProseMirrorNode,
+  from: number,
+  to: number,
+): SuggestionContext {
+  return {
+    before: doc.textBetween(Math.max(0, from - 1800), from, "\n\n", " "),
+    text: doc.textBetween(from, to, "\n\n", " "),
+    after: doc.textBetween(
+      to,
+      Math.min(doc.content.size, to + 1800),
+      "\n\n",
+      " ",
+    ),
+  };
 }
 
 export const ProseEditor = forwardRef<ProseEditorHandle, Props>(
@@ -74,162 +164,284 @@ export const ProseEditor = forwardRef<ProseEditorHandle, Props>(
       editable,
       placeholder,
       onChange,
-      mentionSource,
-      onMention,
       bubbleActions,
+      showBubbleMenu = true,
     },
     ref,
   ) {
-    const [mention, setMention] = useState<{
-      query: string;
-      from: number;
-      to: number;
-      left: number;
-      top: number;
-    } | null>(null);
-
-    // Streaming state. Kept in refs so deltas never trigger a React render.
-    const streamRef = useRef<{
-      from: number;
-      raw: string;
-      frame: number | null;
-    } | null>(null);
+    const [scrollElement, setScrollElement] =
+      useState<HTMLDivElement | null>(null);
+    const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
+    const [draggingBlocks, setDraggingBlocks] = useState(false);
+    const extensions = useMemo(
+      () => [
+        StarterKit.configure({ heading: false, codeBlock: false }),
+        Markdown,
+        UniqueID.configure({
+          attributeName: "id",
+          types: [
+            "paragraph",
+            "blockquote",
+            "bulletList",
+            "orderedList",
+            "horizontalRule",
+          ],
+        }),
+        BlockSelection,
+        SuggestionRange,
+      ],
+      [],
+    );
 
     const editor = useEditor({
       immediatelyRender: false,
-      extensions: [
-        StarterKit.configure({
-          heading: false,
-          codeBlock: false,
-        }),
-        Markdown,
-      ],
+      extensions,
       content: initialMarkdown,
       contentType: "markdown",
       editorProps: {
         attributes: {
           class: "prose-editor focus:outline-none",
+          "aria-label": "Chapter manuscript",
         },
       },
-      onUpdate: () => {
-        if (!streamRef.current) onChange();
-      },
+      onUpdate,
     });
+
+    function onUpdate({ transaction }: { transaction: Transaction }) {
+      if (
+        transaction.getMeta("__uniqueIDTransaction") ||
+        transaction.getMeta("addToHistory") === false
+      ) {
+        return;
+      }
+      onChange();
+    }
 
     useEffect(() => {
       editor?.setEditable(editable);
     }, [editor, editable]);
 
-    // --- @mention -------------------------------------------------------
-    const detectMention = useCallback(
-      (ed: Editor) => {
-        const { from, empty } = ed.state.selection;
-        if (!empty || !ed.isEditable) {
-          setMention(null);
-          return;
-        }
-        const start = Math.max(0, from - 30);
-        const before = ed.state.doc.textBetween(start, from, "\n", "\n");
-        const match = before.match(/@([\p{L}\p{N} '’-]{0,24})$/u);
-        if (!match) {
-          setMention(null);
-          return;
-        }
-        const coords = ed.view.coordsAtPos(from);
-        setMention({
-          query: match[1],
-          from: from - match[0].length,
-          to: from,
-          left: coords.left,
-          top: coords.bottom,
+    const selectBlocks = useCallback(
+      (ids: string[]) => {
+        if (!editor || editor.isDestroyed) return;
+
+        const requestedIds = new Set(ids);
+        const documentBlocks: { id: string; from: number; to: number }[] = [];
+        editor.state.doc.forEach((node, position) => {
+          const id = node.attrs.id as string | null;
+          if (id) {
+            documentBlocks.push({
+              id,
+              from: position,
+              to: position + node.nodeSize,
+            });
+          }
         });
+
+        const selectedIndexes = documentBlocks
+          .map((block, index) => (requestedIds.has(block.id) ? index : -1))
+          .filter((index) => index >= 0);
+        const firstIndex = selectedIndexes[0] ?? 0;
+        const lastIndex = selectedIndexes.at(-1) ?? -1;
+        const selectedBlocks = selectedIndexes.length
+          ? documentBlocks.slice(firstIndex, lastIndex + 1)
+          : [];
+        const uniqueIds = selectedBlocks.map((block) => block.id);
+        const ranges: { from: number; to: number }[] = [];
+        ranges.push(
+          ...selectedBlocks.map((block) => ({
+            from: block.from,
+            to: block.to,
+          })),
+        );
+
+        const tr = editor.state.tr.setMeta(blockSelectionKey, {
+          type: uniqueIds.length ? "set" : "clear",
+          ...(uniqueIds.length ? { ids: uniqueIds } : {}),
+        } as BlockSelectionMeta);
+
+        if (ranges.length) {
+          const from = Math.min(
+            editor.state.doc.content.size,
+            ranges[0].from + 1,
+          );
+          const last = ranges[ranges.length - 1];
+          const to = Math.max(from, Math.min(last.to - 1, tr.doc.content.size));
+          tr.setSelection(
+            TextSelection.between(tr.doc.resolve(from), tr.doc.resolve(to)),
+          );
+        }
+
+        editor.view.dispatch(tr);
+        setSelectedBlockIds(uniqueIds);
+
+        if (uniqueIds.length) {
+          requestAnimationFrame(() => editor.view.focus());
+        }
       },
-      [],
+      [editor],
     );
 
+    const moveBlocks = useCallback(
+      (ids: string[], beforeId: string | null) => {
+        if (!editor || editor.isDestroyed || !ids.length) return;
+
+        const selected = new Set(ids);
+        const blocks: {
+          id: string;
+          node: ProseMirrorNode;
+          from: number;
+          to: number;
+        }[] = [];
+        editor.state.doc.forEach((node, position) => {
+          const id = node.attrs.id as string | null;
+          if (id) {
+            blocks.push({
+              id,
+              node,
+              from: position,
+              to: position + node.nodeSize,
+            });
+          }
+        });
+
+        const moving = blocks.filter((block) => selected.has(block.id));
+        const remaining = blocks.filter((block) => !selected.has(block.id));
+        if (!moving.length || (beforeId && selected.has(beforeId))) return;
+
+        const insertAt = beforeId
+          ? remaining.findIndex((block) => block.id === beforeId)
+          : remaining.length;
+        if (insertAt < 0) return;
+
+        const currentIds = blocks.map((block) => block.id);
+        const reorderedIds = [
+          ...remaining.slice(0, insertAt).map((block) => block.id),
+          ...moving.map((block) => block.id),
+          ...remaining.slice(insertAt).map((block) => block.id),
+        ];
+        if (reorderedIds.every((id, index) => id === currentIds[index])) {
+          return;
+        }
+
+        const targetPosition = beforeId
+          ? blocks.find((block) => block.id === beforeId)?.from
+          : editor.state.doc.content.size;
+        if (targetPosition === undefined) return;
+
+        const tr = editor.state.tr;
+        for (const block of [...moving].sort((a, b) => b.from - a.from)) {
+          tr.delete(block.from, block.to);
+        }
+        const mappedTarget = tr.mapping.map(targetPosition, -1);
+        let insertionPosition = mappedTarget;
+        for (const block of moving) {
+          tr.insert(insertionPosition, block.node);
+          insertionPosition += block.node.nodeSize;
+        }
+        tr.setMeta(blockSelectionKey, {
+          type: "set",
+          ids,
+        } satisfies BlockSelectionMeta);
+
+        editor.view.dispatch(tr);
+        setSelectedBlockIds(ids);
+      },
+      [editor],
+    );
+
+    /* Clicking anywhere in the page column dismisses a selection — including
+       the margins beside the text, which are part of the page as far as the
+       writer is concerned even though they are not part of the contenteditable.
+       Selections made outside this column (an AI panel, the bubble menu) are
+       left alone, since those act *on* the selection. */
     useEffect(() => {
-      if (!editor) return;
-      const handler = () => detectMention(editor);
-      editor.on("selectionUpdate", handler);
-      editor.on("update", handler);
-      return () => {
-        editor.off("selectionUpdate", handler);
-        editor.off("update", handler);
+      if (!editor || !scrollElement) return;
+
+      const dismissSelection = (event: PointerEvent) => {
+        const target = event.target as Element | null;
+        if (!target || target.closest("[data-no-block-select]")) return;
+
+        const insideText = editor.view.dom.contains(target);
+        /* Only the page itself dismisses: the scroller and the wrappers around
+           the document contain the editor DOM, anything else layered over the
+           column (bubble menu, popovers) does not. */
+        if (!insideText && !target.contains(editor.view.dom)) return;
+
+        const hasBlockSelection = Boolean(
+          blockSelectionKey.getState(editor.state)?.selected.size,
+        );
+        if (!hasBlockSelection && (insideText || editor.state.selection.empty)) {
+          return;
+        }
+
+        const tr = editor.state.tr;
+        if (hasBlockSelection) {
+          tr.setMeta(blockSelectionKey, {
+            type: "clear",
+          } satisfies BlockSelectionMeta);
+        }
+        if (!insideText) {
+          tr.setSelection(
+            TextSelection.near(tr.doc.resolve(editor.state.selection.from)),
+          );
+        }
+        editor.view.dispatch(tr);
+        setSelectedBlockIds([]);
+
+        /* A margin click moves focus out of the contenteditable, and the
+           browser keeps the stale range painted once ProseMirror stops
+           mirroring it — so drop the DOM range by hand. */
+        if (!insideText) {
+          requestAnimationFrame(() => {
+            if (editor.isDestroyed || editor.view.hasFocus()) return;
+            window.getSelection()?.removeAllRanges();
+          });
+        }
       };
-    }, [editor, detectMention]);
 
-    const items = mention
-      ? mentionSource()
-          .filter((m) =>
-            m.label.toLowerCase().includes(mention.query.toLowerCase()),
-          )
-          .slice(0, 6)
-      : [];
-
-    const applyMention = useCallback(
-      (item: MentionItem) => {
-        if (!editor || !mention) return;
-        editor
-          .chain()
-          .focus()
-          .insertContentAt({ from: mention.from, to: mention.to }, item.label)
-          .run();
-        setMention(null);
-        onMention(item);
-      },
-      [editor, mention, onMention],
-    );
-
-    // --- Streaming ------------------------------------------------------
-    const renderStream = useCallback(() => {
-      const stream = streamRef.current;
-      if (!editor || !stream) return;
-      stream.frame = null;
-      const to = editor.state.doc.content.size;
-      editor
-        .chain()
-        .insertContentAt(
-          { from: stream.from, to },
-          plainParagraphs(stream.raw),
-          { updateSelection: false },
-        )
-        .run();
-      // Keep the newest prose in view without stealing the caret.
-      editor.view.dom.parentElement?.scrollTo({
-        top: editor.view.dom.scrollHeight,
-        behavior: "smooth",
-      });
-    }, [editor]);
+      scrollElement.addEventListener("pointerdown", dismissSelection, true);
+      return () => {
+        scrollElement.removeEventListener("pointerdown", dismissSelection, true);
+      };
+    }, [editor, scrollElement]);
 
     useImperativeHandle(
       ref,
       (): ProseEditorHandle => ({
         getMarkdown: () => editor?.getMarkdown() ?? "",
         setMarkdown: (markdown) => {
-          editor?.commands.setContent(markdown, { contentType: "markdown" });
+          if (!editor) return;
+          editor.commands.setContent(markdown, {
+            contentType: "markdown",
+            emitUpdate: false,
+          });
+          editor.view.dispatch(
+            editor.state.tr
+              .setMeta(suggestionKey, { type: "clear" })
+              .setMeta(blockSelectionKey, { type: "clear" }),
+          );
+          setSelectedBlockIds([]);
         },
         getSelectionContext: () => {
           if (!editor) return null;
           const { from, to } = editor.state.selection;
-          if (to - from === 0) return null;
-          const doc = editor.state.doc;
-          return {
-            before: doc.textBetween(Math.max(0, from - 1500), from, "\n\n", " "),
-            text: doc.textBetween(from, to, "\n\n", " "),
-            after: doc.textBetween(
-              to,
-              Math.min(doc.content.size, to + 1500),
-              "\n\n",
-              " ",
-            ),
-          };
+          if (from === to) return null;
+          return contextForRange(editor.state.doc, from, to);
         },
-        focus: () => editor?.commands.focus("end"),
+        hasSelection: () => {
+          if (!editor) return false;
+          return !editor.state.selection.empty;
+        },
+        focus: (position = "current") => {
+          if (!editor) return;
+          editor.commands.focus(position === "end" ? "end" : undefined);
+        },
         highlightQuote: (quote) => {
           if (!editor) return false;
           const needle = quote.trim();
           if (!needle) return false;
-          // Walk text nodes so the match maps back to real document positions.
+
           let found: { from: number; to: number } | null = null;
           editor.state.doc.descendants((node, pos) => {
             if (found || !node.isText || !node.text) return true;
@@ -240,11 +452,9 @@ export const ProseEditor = forwardRef<ProseEditorHandle, Props>(
             return true;
           });
           if (!found) return false;
+
           const range: { from: number; to: number } = found;
           editor.chain().focus().setTextSelection(range).run();
-          editor.view.dom
-            .querySelector(".ProseMirror-selectednode")
-            ?.scrollIntoView({ block: "center" });
           const coords = editor.view.coordsAtPos(range.from);
           editor.view.dom.parentElement?.scrollBy({
             top: coords.top - window.innerHeight / 2,
@@ -252,113 +462,129 @@ export const ProseEditor = forwardRef<ProseEditorHandle, Props>(
           });
           return true;
         },
-        beginAppendStream: () => {
-          if (!editor) return;
-          const empty = editor.state.doc.textContent.trim().length === 0;
-          if (!empty) {
-            // Start the generated passage in its own paragraph.
-            editor
-              .chain()
-              .focus("end")
-              .insertContentAt(editor.state.doc.content.size, {
-                type: "paragraph",
-              })
-              .run();
-          }
-          streamRef.current = {
-            from: empty ? 0 : editor.state.doc.content.size - 2,
-            raw: "",
-            frame: null,
-          };
+        startSuggestion: (mode, options) => {
+          if (!editor || suggestionKey.getState(editor.state)) return null;
+
+          const selection = editor.state.selection;
+          if (mode === "replace" && selection.empty) return null;
+
+          const position = options?.atEnd
+            ? editor.state.doc.content.size
+            : selection.from;
+          const tracked: TrackedSuggestion =
+            mode === "replace"
+              ? { from: selection.from, to: selection.to, mode }
+              : { from: position, to: position, mode };
+
+          const context = contextForRange(
+            editor.state.doc,
+            tracked.from,
+            tracked.to,
+          );
+          editor.view.dispatch(
+            editor.state.tr.setMeta(suggestionKey, {
+              type: "set",
+              value: tracked,
+            } satisfies SuggestionMeta),
+          );
+          return context;
         },
-        beginReplaceStream: () => {
-          if (!editor) return;
-          const { from, to } = editor.state.selection;
-          editor.chain().insertContentAt({ from, to }, "").run();
-          streamRef.current = { from, raw: "", frame: null };
-        },
-        pushStreamDelta: (text) => {
-          const stream = streamRef.current;
-          if (!stream) return;
-          stream.raw += text;
-          // Throttle to one repaint per frame — rewriting the streamed region
-          // on every token makes long generations crawl.
-          if (stream.frame === null) {
-            stream.frame = requestAnimationFrame(renderStream);
-          }
-        },
-        endStream: () => {
-          const stream = streamRef.current;
-          if (!editor || !stream) return;
-          if (stream.frame !== null) cancelAnimationFrame(stream.frame);
-          streamRef.current = null;
-          const to = editor.state.doc.content.size;
-          // Re-parse the finished passage so Markdown emphasis and scene
-          // breaks become real nodes rather than literal asterisks.
+        acceptSuggestion: (markdown) => {
+          if (!editor) return false;
+          const tracked = suggestionKey.getState(editor.state);
+          if (!tracked || !markdown.trim()) return false;
+
+          editor.view.dispatch(
+            editor.state.tr.setMeta(suggestionKey, { type: "clear" }),
+          );
           editor
             .chain()
-            .insertContentAt({ from: stream.from, to }, stream.raw.trim(), {
-              contentType: "markdown",
-              updateSelection: false,
-            })
+            .focus()
+            .insertContentAt(
+              { from: tracked.from, to: tracked.to },
+              markdown.trim(),
+              { contentType: "markdown", updateSelection: true },
+            )
             .run();
-          onChange();
+          return true;
+        },
+        discardSuggestion: () => {
+          if (!editor) return;
+          editor.view.dispatch(
+            editor.state.tr.setMeta(suggestionKey, { type: "clear" }),
+          );
         },
       }),
-      [editor, renderStream, onChange],
+      [editor],
     );
 
-    if (!editor) {
-      return <div className="min-h-0 flex-1" />;
-    }
+    if (!editor) return <div className="min-h-0 flex-1" />;
 
     return (
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
-        {bubbleActions && (
+      <div
+        ref={setScrollElement}
+        className="relative min-h-0 flex-1 overflow-y-auto"
+      >
+        {/* A toolbar anchored to the selection has nowhere sensible to sit
+            while that selection is being carried across the page. */}
+        {showBubbleMenu && editable && !draggingBlocks && (
           <BubbleMenu
             editor={editor}
-            shouldShow={({ from, to }) => editable && to - from > 0}
-            className="flex items-center gap-1 rounded-lg border bg-popover p-1 shadow-xl"
+            shouldShow={({ from, to }) => editable && to > from}
+            options={{
+              strategy: "fixed",
+              placement: "top",
+              offset: 8,
+              flip: true,
+              shift: { padding: 8 },
+            }}
+            className="flex max-w-[calc(100vw-1rem)] items-center gap-1 overflow-x-auto rounded-lg bg-popover p-1 ring-1 ring-foreground/10"
           >
+            <Button
+              type="button"
+              variant={editor.isActive("bold") ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label="Bold"
+              aria-pressed={editor.isActive("bold")}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => editor.chain().focus().toggleBold().run()}
+            >
+              <RiBold />
+            </Button>
+            <Button
+              type="button"
+              variant={editor.isActive("italic") ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label="Italic"
+              aria-pressed={editor.isActive("italic")}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+            >
+              <RiItalic />
+            </Button>
             {bubbleActions}
           </BubbleMenu>
         )}
 
+        <BlockEditorControls
+          editor={editor}
+          scrollElement={scrollElement}
+          editable={editable}
+          selectedIds={selectedBlockIds}
+          onSelect={selectBlocks}
+          onMove={moveBlocks}
+          onDragChange={setDraggingBlocks}
+        />
+
         <EditorContent
           editor={editor}
-          className="mx-auto min-h-full w-full max-w-3xl px-10 py-8"
+          className="mx-auto min-h-full w-full max-w-[72ch] px-5 pt-10 pb-[30dvh] sm:px-8 sm:pt-14 lg:px-10"
         />
 
         {editor.isEmpty && placeholder && (
-          <p className="pointer-events-none absolute left-1/2 top-8 w-full max-w-3xl -translate-x-1/2 px-10 text-[15px] leading-relaxed text-muted-foreground/50">
+          <p className="pointer-events-none absolute top-10 left-1/2 w-full max-w-[72ch] -translate-x-1/2 px-5 font-serif text-lg/8 text-muted-foreground/55 sm:top-14 sm:px-8 sm:text-[1.0625rem] lg:px-10">
             {placeholder}
           </p>
-        )}
-
-        {mention && items.length > 0 && (
-          <div
-            className="fixed z-50 w-64 overflow-hidden rounded-lg border bg-popover shadow-xl"
-            style={{ left: mention.left, top: mention.top + 6 }}
-          >
-            {items.map((m) => (
-              <button
-                key={`${m.kind}-${m.id}`}
-                className={cn(
-                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
-                  "hover:bg-accent",
-                )}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  applyMention(m);
-                }}
-              >
-                <Badge variant="outline" className="text-[9px] uppercase">
-                  {m.kind}
-                </Badge>
-                {m.label}
-              </button>
-            ))}
-          </div>
         )}
       </div>
     );

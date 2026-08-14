@@ -6,7 +6,7 @@ import { proseStreamResponse } from "@/lib/prose-stream";
 
 export const maxDuration = 300;
 
-export const INLINE_ACTIONS = {
+const INLINE_ACTIONS = {
   rewrite: {
     label: "Rewrite",
     directive:
@@ -34,7 +34,7 @@ export const INLINE_ACTIONS = {
   },
 } as const;
 
-export type InlineAction = keyof typeof INLINE_ACTIONS;
+type InlineAction = keyof typeof INLINE_ACTIONS;
 
 const bodySchema = z.object({
   novelId: z.uuid(),
@@ -73,30 +73,37 @@ export async function POST(req: Request) {
     selectedElementIds,
   } = parsed.data;
 
-  const { chapter, context } = await buildSceneContext({
-    novelId,
-    chapterId,
-    selectedCharacterIds,
-    selectedLocationIds,
-    selectedElementIds,
-    instruction,
-    // Retrieval is steered by the passage being revised, not the chapter tail.
-    draftTail: selection,
-    // The surrounding prose is supplied directly, so the parent tail would
-    // only duplicate context. Trim the budget accordingly.
-    budgetTokens: 20_000,
-  });
-  if (!chapter) {
-    return Response.json({ error: "Chapter not found" }, { status: 404 });
-  }
-
   const started = Date.now();
-  const result = streamText({
-    model: MODELS.writing,
-    instructions:
-      NOVELIST_PERSONA +
-      ` You are revising one passage inside an existing chapter. Obey the style contract. Output ONLY the replacement prose — no preamble, no explanation, no quotation marks around it, no code fences. It must read seamlessly against the text before and after it.`,
-    prompt: `${context.text}
+  return proseStreamResponse(async ({ status }) => {
+    status("context", "Building story context");
+    const { chapter, context, retrievedCount } = await buildSceneContext({
+      novelId,
+      chapterId,
+      selectedCharacterIds,
+      selectedLocationIds,
+      selectedElementIds,
+      instruction,
+      // Retrieval is steered by the passage being revised, not the chapter tail.
+      draftTail: selection,
+      // The surrounding prose is supplied directly, so the parent tail would
+      // only duplicate context. Trim the budget accordingly.
+      budgetTokens: 20_000,
+    });
+    if (!chapter) throw new Error("Chapter not found");
+
+    status(
+      "model",
+      retrievedCount
+        ? `Context ready · ${retrievedCount} earlier passage${retrievedCount === 1 ? "" : "s"} retrieved`
+        : "Context ready",
+    );
+    const result = streamText({
+      model: MODELS.writing,
+      abortSignal: req.signal,
+      instructions:
+        NOVELIST_PERSONA +
+        ` You are revising one passage inside an existing chapter. Obey the style contract. Output ONLY the replacement prose — no preamble, no explanation, no quotation marks around it, no code fences. It must read seamlessly against the text before and after it.`,
+      prompt: `${context.text}
 
 ---
 ## The passage sits inside Chapter ${chapter.number} ("${chapter.title}")
@@ -112,9 +119,9 @@ ${after || "(this is the end of the chapter)"}
 
 ---
 Task: ${INLINE_ACTIONS[action].directive}${instruction ? `\n\nAuthor's direction: ${instruction}` : ""}`,
-  });
-
-  return proseStreamResponse(result.fullStream, {
+    });
+    return result.fullStream;
+  }, {
     onFinish: (usage) =>
       logGeneration({
         novelId,

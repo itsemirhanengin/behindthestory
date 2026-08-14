@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Download, PenLine } from "lucide-react";
+import { RiDownloadLine, RiEditLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -75,7 +75,7 @@ export function ReadingView({ novelId }: { novelId: string }) {
             </span>
             <Button size="sm" variant="secondary" asChild>
               <a href={`/api/novels/${novelId}/export`} download>
-                <Download className="size-4" /> Export Markdown
+                <RiDownloadLine className="size-4" /> Export Markdown
               </a>
             </Button>
           </div>
@@ -104,7 +104,7 @@ export function ReadingView({ novelId }: { novelId: string }) {
                     className="text-muted-foreground transition-colors hover:text-foreground"
                     title="Edit this chapter"
                   >
-                    <PenLine className="size-3.5" />
+                    <RiEditLine className="size-3.5" />
                   </Link>
                 </h2>
               </div>

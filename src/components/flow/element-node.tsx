@@ -2,7 +2,12 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { Eye, Lightbulb, Shuffle, Zap } from "lucide-react";
+import {
+  RiEyeLine,
+  RiFlashlightLine,
+  RiLightbulbLine,
+  RiShuffleLine,
+} from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import type { StoryElement } from "@/db/schema";
 
@@ -10,12 +15,12 @@ export type ElementNodeType = Node<{ element: StoryElement }, "element">;
 
 export const elementStyles: Record<
   StoryElement["type"],
-  { color: string; icon: typeof Eye; label: string }
+  { color: string; icon: typeof RiEyeLine; label: string }
 > = {
-  twist: { color: "#f43f5e", icon: Shuffle, label: "Twist" },
-  foreshadowing: { color: "#eab308", icon: Eye, label: "Foreshadowing" },
-  plot_thread: { color: "#38bdf8", icon: Lightbulb, label: "Plot thread" },
-  event: { color: "#a78bfa", icon: Zap, label: "Event" },
+  twist: { color: "#8c3a5e", icon: RiShuffleLine, label: "Twist" },
+  foreshadowing: { color: "#b07d48", icon: RiEyeLine, label: "Foreshadowing" },
+  plot_thread: { color: "#3f5e6b", icon: RiLightbulbLine, label: "Plot thread" },
+  event: { color: "#6b4c7a", icon: RiFlashlightLine, label: "Event" },
 };
 
 export const ElementNode = memo(function ElementNode({
@@ -28,7 +33,7 @@ export const ElementNode = memo(function ElementNode({
   return (
     <div
       className={cn(
-        "w-44 rounded-lg border bg-card/90 p-2 shadow backdrop-blur",
+        "w-44 border bg-card p-2",
         selected ? "border-primary" : "border-border",
         e.status === "resolved" && "opacity-60",
       )}
