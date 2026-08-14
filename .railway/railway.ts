@@ -12,6 +12,20 @@ const REPO = "itsemirhanengin/behindthestory";
  * Secrets are `preserve()`d rather than written here: this file is committed,
  * and the values are set once with `railway variables --set`. Applying the
  * config again keeps whatever is already stored.
+ *
+ * Two things this file cannot express, both of which live only in Railway's
+ * own state and are easy to lose when a service is recreated:
+ *
+ * - Custom domains. `railway config apply` rejects them outright; attach them
+ *   with `railway domain <name> --port <p> --service <s>`.
+ * - Push-to-deploy triggers. Declaring `source: github(...)` tells Railway
+ *   where the code is, but the webhook that redeploys on push is a separate
+ *   `deploymentTrigger` record, and Railway can only create it once the GitHub
+ *   App is installed on the repository. Services applied before the app was
+ *   installed came up with a source and no trigger — they built when deployed
+ *   by hand and then silently ignored every push. Verify with
+ *   `railway api 'query { project(id: "...") { deploymentTriggers { edges { node { serviceId branch } } } } }'`
+ *   and expect one row per service.
  */
 export default defineRailway(() => {
   const api = service("api", {
