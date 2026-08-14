@@ -14,6 +14,24 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+/**
+ * The version a client checks its copy against.
+ *
+ * Every table reachable through the generic entity routes carries one, because
+ * the mobile app edits offline and reconnects with writes that were composed
+ * against a row it read some time ago. Without a value to compare, the last
+ * device to sync would silently overwrite whatever the other one wrote.
+ *
+ * `$onUpdate` means Drizzle stamps it on every `.set()`, so no write path has
+ * to remember to — and a path that bypasses Drizzle would be a bug regardless.
+ */
+function updatedAtColumn() {
+  return timestamp("updated_at")
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date());
+}
+
 export const POV_VALUES = ["first", "third_limited", "third_omniscient"] as const;
 export const TENSE_VALUES = ["past", "present"] as const;
 export const AI_SUGGESTION_DECISIONS = ["accepted", "rejected"] as const;
@@ -156,6 +174,7 @@ export const characters = pgTable(
     posX: real("pos_x").notNull().default(0),
     posY: real("pos_y").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [index("characters_novel_idx").on(t.novelId)],
 );
@@ -190,6 +209,7 @@ export const relationships = pgTable(
       .notNull()
       .default("user"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [index("relationships_novel_idx").on(t.novelId)],
 );
@@ -265,6 +285,7 @@ export const storyEvents = pgTable(
       .notNull()
       .default("user"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [
     index("story_events_novel_idx").on(t.novelId),
@@ -312,6 +333,7 @@ export const locations = pgTable(
     posX: real("pos_x").notNull().default(0),
     posY: real("pos_y").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [index("locations_novel_idx").on(t.novelId)],
 );
@@ -328,6 +350,7 @@ export const locationLinks = pgTable("location_links", {
     .notNull()
     .references(() => locations.id, { onDelete: "cascade" }),
   label: text("label").notNull().default(""),
+  updatedAt: updatedAtColumn(),
 });
 
 /** A planned unit of action inside a chapter, authored or AI-drafted. */
@@ -376,6 +399,7 @@ export const chapters = pgTable(
       .notNull()
       .default("draft"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [
     index("chapters_novel_idx").on(t.novelId),
@@ -425,6 +449,7 @@ export const storyElements = pgTable(
       .notNull()
       .default("ai"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [index("story_elements_novel_idx").on(t.novelId)],
 );
@@ -453,6 +478,7 @@ export const characterFacts = pgTable(
       .notNull()
       .default("ai"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [
     index("character_facts_novel_idx").on(t.novelId),
