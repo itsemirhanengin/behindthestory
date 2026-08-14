@@ -7,20 +7,38 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+/**
+ * The studio's palette (apps/studio globals.css), converted from oklch.
+ * Same three rules apply here: no corner radius, no shadows, warm ground and
+ * warm ink — day is paper, night is brown-black ink, never #000. The accent
+ * is oxblood by day and terracotta by night.
+ */
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#1D1916',
+    background: '#F9F6F1',
+    backgroundElement: '#F1EDE6',
+    backgroundSelected: '#E9E4DA',
+    textSecondary: '#69625B',
+    card: '#FEFCF8',
+    primary: '#622015',
+    primaryForeground: '#FCFAF6',
+    border: '#DDD8D0',
+    input: '#D9D3CA',
+    destructive: '#8F3126',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#EAE6DC',
+    background: '#15120F',
+    backgroundElement: '#272320',
+    backgroundSelected: '#312B27',
+    textSecondary: '#9F9990',
+    card: '#1F1B18',
+    primary: '#CF8D60',
+    primaryForeground: '#17130F',
+    border: '#3A3631',
+    input: '#413C38',
+    destructive: '#CA564B',
   },
 } as const;
 

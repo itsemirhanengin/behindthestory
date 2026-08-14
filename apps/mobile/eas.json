@@ -9,33 +9,23 @@
       "distribution": "internal",
       "node": "24.0.0",
       "ios": {
-        "simulator": true,
-        "image": "macos-sequoia-15.6-xcode-26.2"
+        "simulator": true
       },
       "channel": "development-simulator"
     },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "node": "24.0.0",
-      "ios": {
-        "image": "macos-sequoia-15.6-xcode-26.2"
-      }
+      "node": "24.0.0"
     },
     "preview": {
       "distribution": "internal",
       "node": "24.0.0",
-      "ios": {
-        "image": "macos-sequoia-15.6-xcode-26.2"
-      },
       "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
       "node": "24.0.0",
-      "ios": {
-        "image": "macos-sequoia-15.6-xcode-26.2"
-      },
       "channel": "production"
     }
   },
