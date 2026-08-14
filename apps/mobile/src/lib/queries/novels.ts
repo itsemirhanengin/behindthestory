@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InferRequestType, InferResponseType } from 'hono/client';
+import type { InferRequestType } from 'hono/client';
 
 import { apiError, rpc } from '@/lib/api';
+import type { Novel } from '@/lib/types';
 
-/** A novel as it crosses the wire — timestamps are strings here, not Dates. */
-export type Novel = InferResponseType<typeof rpc.api.novels.$get, 200>[number];
+export type { Novel };
 
 /**
  * The create payload, taken from the route rather than restated here. If the
@@ -15,6 +15,7 @@ export type CreateNovelInput = InferRequestType<typeof rpc.api.novels.$post>['js
 
 const keys = {
   novels: ['novels'] as const,
+  novel: (novelId: string) => ['novels', novelId] as const,
 };
 
 export function useNovels() {
@@ -24,6 +25,35 @@ export function useNovels() {
       const res = await rpc.api.novels.$get();
       if (!res.ok) throw await apiError(res);
       return res.json();
+    },
+  });
+}
+
+export function useNovel(novelId: string) {
+  return useQuery({
+    queryKey: keys.novel(novelId),
+    queryFn: async () => {
+      const res = await rpc.api.novels[':novelId'].$get({ param: { novelId } });
+      if (!res.ok) throw await apiError(res);
+      return res.json();
+    },
+    enabled: Boolean(novelId),
+  });
+}
+
+export function useUpdateNovel(novelId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      input: InferRequestType<(typeof rpc.api.novels)[':novelId']['$patch']>['json'],
+    ) => {
+      const res = await rpc.api.novels[':novelId'].$patch({ param: { novelId }, json: input });
+      if (!res.ok) throw await apiError(res);
+      return res.json();
+    },
+    onSuccess: (novel) => {
+      queryClient.setQueryData(keys.novel(novelId), novel);
+      void queryClient.invalidateQueries({ queryKey: keys.novels, exact: true });
     },
   });
 }

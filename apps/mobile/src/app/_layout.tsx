@@ -57,6 +57,12 @@ function RootNavigator() {
           name="new-novel"
           options={{ headerShown: false, presentation: 'modal' }}
         />
+        {/* The studio's per-novel sidebar becomes a native tab bar inside the
+            pushed novel screen; the chapter reader pushes on top of it. */}
+        <Stack.Screen name="novel/[novelId]" options={{ headerBackTitle: 'Novels' }} />
+        <Stack.Screen name="chapter/[chapterId]" options={{ headerBackTitle: 'Back' }} />
+        <Stack.Screen name="character/[characterId]" options={{ headerBackTitle: 'Back' }} />
+        <Stack.Screen name="location/[locationId]" options={{ headerBackTitle: 'Back' }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" options={{ headerShown: false }} />

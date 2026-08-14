@@ -111,7 +111,7 @@ export default function NovelsScreen() {
         renderItem={({ item: novel }) => (
           <Pressable
             style={({ pressed }) => [card, styles.card, pressed && { opacity: 0.85 }]}
-            // TODO(phase 04): push the novel's own screens once they exist.
+            onPress={() => router.push(`/novel/${novel.id}`)}
             onLongPress={() => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               confirmDelete(novel);
