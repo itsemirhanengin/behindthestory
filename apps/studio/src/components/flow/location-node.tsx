@@ -4,7 +4,7 @@ import { memo } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { RiMapPinLine, RiSparkling2Line } from "@remixicon/react";
 import { cn } from "@/lib/utils";
-import type { Character, Location } from "@/db/schema";
+import type { Character, Location } from "@behindthestory/db/schema";
 
 export type LocationNodeType = Node<
   { location: Location; members: Character[] },

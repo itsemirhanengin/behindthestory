@@ -4,7 +4,7 @@
  * use it too.
  */
 import { and, eq } from "drizzle-orm";
-import { getDb, chapters, storyEvents, type StoryEvent } from "@/db";
+import { getDb, chapters, storyEvents, type StoryEvent } from "@behindthestory/db";
 
 /**
  * The active chapter occupying a slot, or null.

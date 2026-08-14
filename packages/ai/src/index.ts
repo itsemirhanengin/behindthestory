@@ -1,4 +1,4 @@
-import { getDb, aiGenerations, type Novel } from "@/db";
+import { getDb, aiGenerations, type Novel } from "@behindthestory/db";
 
 /**
  * Gateway model strings. Writing wants the strongest model; extraction and

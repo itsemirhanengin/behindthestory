@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { getDb, novels, POV_VALUES, TENSE_VALUES } from "@/db";
-import { MODELS, NOVELIST_PERSONA, logGeneration } from "@/lib/ai";
+import { getDb, novels, POV_VALUES, TENSE_VALUES } from "@behindthestory/db";
+import { MODELS, NOVELIST_PERSONA, logGeneration } from "@behindthestory/ai";
 
 export const maxDuration = 300;
 

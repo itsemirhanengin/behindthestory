@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { getDb, characters, relationships, type StoryEvent } from "@/db";
-import { loadStoryEvents } from "@/lib/story-events";
+import { getDb, characters, relationships, type StoryEvent } from "@behindthestory/db";
+import { loadStoryEvents } from "@behindthestory/core/story-events";
 import {
   LATEST,
   allTransitions,
@@ -10,7 +10,7 @@ import {
   eventsByRelationship,
   formatChapterRef,
   sortEvents,
-} from "@/lib/story-state";
+} from "@behindthestory/core/story-state";
 
 type Params = { params: Promise<{ novelId: string }> };
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { getDb, chapters, chapterRevisions } from "@/db";
+import { getDb, chapters, chapterRevisions } from "@behindthestory/db";
 
 type Params = { params: Promise<{ chapterId: string }> };
 

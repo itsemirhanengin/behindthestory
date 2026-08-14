@@ -5,13 +5,13 @@ import {
   REL_TYPE_VALUES,
   CHAR_STATUS_VALUES,
   EVENT_IMPACT_VALUES,
-} from "@/db";
-import { MODELS, NOVELIST_PERSONA, logGeneration } from "@/lib/ai";
-import { loadNovelBundle, buildStoryContext } from "@/lib/context-builder";
+} from "@behindthestory/db";
+import { MODELS, NOVELIST_PERSONA, logGeneration } from "@behindthestory/ai";
+import { loadNovelBundle, buildStoryContext } from "@behindthestory/core/context-builder";
 import {
   eventsByRelationship,
   relationshipStateAsOf,
-} from "@/lib/story-state";
+} from "@behindthestory/core/story-state";
 
 export const maxDuration = 300;
 

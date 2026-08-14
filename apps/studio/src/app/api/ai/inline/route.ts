@@ -1,8 +1,8 @@
 import { streamText } from "ai";
 import { z } from "zod";
-import { MODELS, NOVELIST_PERSONA, logGeneration } from "@/lib/ai";
-import { buildSceneContext } from "@/lib/scene-context";
-import { proseStreamResponse } from "@/lib/prose-stream";
+import { MODELS, NOVELIST_PERSONA, logGeneration } from "@behindthestory/ai";
+import { buildSceneContext } from "@behindthestory/core/scene-context";
+import { proseStreamResponse } from "@behindthestory/core/prose-stream";
 
 export const maxDuration = 300;
 

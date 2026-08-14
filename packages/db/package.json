@@ -1,0 +1,24 @@
+{
+  "name": "@behindthestory/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//": "Just-in-Time package: entrypoints are TypeScript source and the consumer's bundler compiles them. No build step, so there is nothing to keep in sync.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./registry": "./src/registry.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/pg": "^8.21.0",
+    "typescript": "^5"
+  }
+}

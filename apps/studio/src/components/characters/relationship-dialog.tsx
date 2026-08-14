@@ -41,7 +41,7 @@ import {
   type Relationship,
   type RelType,
   type StoryEvent,
-} from "@/db/schema";
+} from "@behindthestory/db/schema";
 import {
   allTransitions,
   causalTrace,
@@ -49,7 +49,7 @@ import {
   eventsByRelationship,
   formatChapterRef,
   relationshipStateAsOf,
-} from "@/lib/story-state";
+} from "@behindthestory/core/story-state";
 
 export type RelationshipDraft = {
   sourceCharacterId: string;

@@ -12,13 +12,13 @@ import {
   REL_TYPE_VALUES,
   CHAR_STATUS_VALUES,
   EVENT_IMPACT_VALUES,
-} from "@/db";
+} from "@behindthestory/db";
 import {
   eventKey,
   loadStoryEvents,
   normalizeText as normalize,
-} from "@/lib/story-events";
-import { eventsByCharacter, characterStateAsOf } from "@/lib/story-state";
+} from "@behindthestory/core/story-events";
+import { eventsByCharacter, characterStateAsOf } from "@behindthestory/core/story-state";
 
 type Params = { params: Promise<{ novelId: string }> };
 

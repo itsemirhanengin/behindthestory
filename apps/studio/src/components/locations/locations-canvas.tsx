@@ -30,7 +30,7 @@ import {
   type LocationNodeType,
 } from "@/components/flow/location-node";
 import { LocationSheet } from "./location-sheet";
-import type { Character, Location, LocationLink } from "@/db/schema";
+import type { Character, Location, LocationLink } from "@behindthestory/db/schema";
 
 const nodeTypes = { location: LocationNode };
 

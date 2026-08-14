@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { buildSceneContext } from "@/lib/scene-context";
+import { buildSceneContext } from "@behindthestory/core/scene-context";
 
 export const maxDuration = 120;
 

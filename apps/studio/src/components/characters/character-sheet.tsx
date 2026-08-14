@@ -35,7 +35,7 @@ import {
   type EventImpact,
   type Relationship,
   type StoryEvent,
-} from "@/db/schema";
+} from "@behindthestory/db/schema";
 import {
   causalTrace,
   characterStateAsOf,
@@ -43,7 +43,7 @@ import {
   eventsByRelationship,
   formatChapterRef,
   relationshipStateAsOf,
-} from "@/lib/story-state";
+} from "@behindthestory/core/story-state";
 
 const CHARACTER_COLORS = [
   "#8c3a2b", // terracotta

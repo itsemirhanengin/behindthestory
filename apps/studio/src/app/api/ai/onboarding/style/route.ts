@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { POV_VALUES, TENSE_VALUES } from "@/db";
-import { MODELS, NOVELIST_PERSONA } from "@/lib/ai";
+import { POV_VALUES, TENSE_VALUES } from "@behindthestory/db";
+import { MODELS, NOVELIST_PERSONA } from "@behindthestory/ai";
 import {
   CHAPTER_WORDS,
   type StyleProposal,
   type StyleResponse,
-} from "@/lib/onboarding";
+} from "@behindthestory/core/onboarding";
 
 export const maxDuration = 300;
 

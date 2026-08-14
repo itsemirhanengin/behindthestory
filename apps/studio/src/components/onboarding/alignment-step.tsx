@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { Reading, WizardTurn } from "@/lib/onboarding";
+import type { Reading, WizardTurn } from "@behindthestory/core/onboarding";
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (

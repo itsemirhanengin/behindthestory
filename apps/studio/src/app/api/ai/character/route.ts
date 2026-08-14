@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { MODELS, NOVELIST_PERSONA, logGeneration } from "@/lib/ai";
-import { loadNovelBundle, buildStoryContext } from "@/lib/context-builder";
+import { MODELS, NOVELIST_PERSONA, logGeneration } from "@behindthestory/ai";
+import { loadNovelBundle, buildStoryContext } from "@behindthestory/core/context-builder";
 
 export const maxDuration = 300;
 

@@ -9,8 +9,8 @@ import {
   REL_TYPE_VALUES,
   CHAR_STATUS_VALUES,
   EVENT_IMPACT_VALUES,
-} from "@/db";
-import { resolveChapterId } from "@/lib/story-events";
+} from "@behindthestory/db";
+import { resolveChapterId } from "@behindthestory/core/story-events";
 
 type Params = { params: Promise<{ novelId: string }> };
 

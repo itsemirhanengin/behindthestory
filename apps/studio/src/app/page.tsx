@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AccountMenu } from "@/components/account-menu";
 import { api } from "@/lib/api";
-import type { Novel } from "@/db/schema";
+import type { Novel } from "@behindthestory/db/schema";
 
 export default function HomePage() {
   const [novels, setNovels] = useState<Novel[] | null>(null);

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { MIN_DESCRIPTION_WORDS, countWords } from "@/lib/onboarding";
+import { MIN_DESCRIPTION_WORDS, countWords } from "@behindthestory/core/onboarding";
 
 /** What the model can actually do something with, in the order it matters. */
 const GUIDANCE = [

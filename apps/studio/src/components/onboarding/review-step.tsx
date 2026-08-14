@@ -8,7 +8,7 @@ import {
   tenseLabel,
   type Reading,
   type StyleFields,
-} from "@/lib/onboarding";
+} from "@behindthestory/core/onboarding";
 
 function Colophon({ term, children }: { term: string; children: React.ReactNode }) {
   return (

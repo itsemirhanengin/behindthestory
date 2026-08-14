@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
-import { getDb, chapters, canonChunks } from "@/db";
-import { indexChapter } from "@/lib/canon-index";
+import { getDb, chapters, canonChunks } from "@behindthestory/db";
+import { indexChapter } from "@behindthestory/core/canon-index";
 
 export const maxDuration = 300;
 

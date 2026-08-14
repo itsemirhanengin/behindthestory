@@ -25,8 +25,8 @@ import type {
   RelType,
   StoryElement,
   StoryEvent,
-} from "@/db/schema";
-import { eventsByRelationship, relationshipStateAsOf } from "@/lib/story-state";
+} from "@behindthestory/db/schema";
+import { eventsByRelationship, relationshipStateAsOf } from "@behindthestory/core/story-state";
 
 type Analysis = {
   chapterSummary: string;

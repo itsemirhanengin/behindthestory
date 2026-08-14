@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
-import { chapters, getDb, novels } from "@/db";
+import { chapters, getDb, novels } from "@behindthestory/db";
 
 /**
  * The whole authorisation model.

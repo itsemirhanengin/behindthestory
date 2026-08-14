@@ -5,8 +5,8 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { RiSparkling2Line } from "@remixicon/react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { Character } from "@/db/schema";
-import { formatChapterRef, type CharacterState } from "@/lib/story-state";
+import type { Character } from "@behindthestory/db/schema";
+import { formatChapterRef, type CharacterState } from "@behindthestory/core/story-state";
 
 /**
  * `state` is the character as of the chapter the canvas is showing, derived from

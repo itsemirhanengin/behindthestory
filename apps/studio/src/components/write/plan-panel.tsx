@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { Beat, Chapter } from "@/db/schema";
+import type { Beat, Chapter } from "@behindthestory/db/schema";
 
 type Props = {
   novelId: string;

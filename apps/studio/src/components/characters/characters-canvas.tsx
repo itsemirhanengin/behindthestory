@@ -39,13 +39,13 @@ import {
   eventsByCharacter,
   eventsByRelationship,
   relationshipStateAsOf,
-} from "@/lib/story-state";
+} from "@behindthestory/core/story-state";
 import type {
   Chapter,
   Character,
   Relationship,
   StoryEvent,
-} from "@/db/schema";
+} from "@behindthestory/db/schema";
 
 const nodeTypes = { character: CharacterNode };
 const edgeTypes = { relationship: RelationshipEdge };

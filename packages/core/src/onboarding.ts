@@ -1,4 +1,4 @@
-import type { Novel } from "@/db/schema";
+import type { Novel } from "@behindthestory/db/schema";
 
 /**
  * Contracts shared by the new-novel wizard and the two AI endpoints behind it.

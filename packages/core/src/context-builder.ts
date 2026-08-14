@@ -17,8 +17,8 @@ import {
   type Chapter,
   type StoryElement,
   type Novel,
-} from "@/db";
-import { compileStyleDirective } from "./ai";
+} from "@behindthestory/db";
+import { compileStyleDirective } from "@behindthestory/ai";
 import {
   LATEST,
   causalTrace,

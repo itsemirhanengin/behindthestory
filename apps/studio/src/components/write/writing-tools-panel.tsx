@@ -10,7 +10,7 @@ import type {
   Character,
   Location,
   StoryElement,
-} from "@/db/schema";
+} from "@behindthestory/db/schema";
 import { ContextPanel, type ContextSelection } from "./context-panel";
 import { ContinuityPanel } from "./continuity-panel";
 import { PlanPanel } from "./plan-panel";

@@ -28,7 +28,7 @@ import {
 import { ManuscriptSearch } from "@/components/manuscript-search";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useNovelWorkspace } from "@/components/novel-workspace";
-import type { Chapter, Novel } from "@/db/schema";
+import type { Chapter, Novel } from "@behindthestory/db/schema";
 
 const sections = [
   { slug: "bible", label: "Story Bible", icon: RiBookMarkedLine },

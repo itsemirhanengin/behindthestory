@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { desc, eq, sql } from "drizzle-orm";
-import { getDb, aiGenerations } from "@/db";
+import { getDb, aiGenerations } from "@behindthestory/db";
 
 type Params = { params: Promise<{ novelId: string }> };
 

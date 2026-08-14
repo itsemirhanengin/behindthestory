@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from "@/lib/api";
-import type { Novel } from "@/db/schema";
+import type { Novel } from "@behindthestory/db/schema";
 
 type Usage = {
   totals: { calls: number; inputTokens: number; outputTokens: number };

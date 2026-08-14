@@ -8,8 +8,8 @@ import {
   type EdgeProps,
   type Edge,
 } from "@xyflow/react";
-import type { Relationship, RelType } from "@/db/schema";
-import type { RelationshipState } from "@/lib/story-state";
+import type { Relationship, RelType } from "@behindthestory/db/schema";
+import type { RelationshipState } from "@behindthestory/core/story-state";
 
 /**
  * The edge renders a bond *as of a chapter*, never "the bond" — the state comes

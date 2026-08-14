@@ -20,7 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { ChapterRevision } from "@/db/schema";
+import type { ChapterRevision } from "@behindthestory/db/schema";
 
 type RevisionSummary = Pick<
   ChapterRevision,

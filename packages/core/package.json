@@ -1,0 +1,29 @@
+{
+  "name": "@behindthestory/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//": "Domain logic with no HTTP layer: the same modules serve the API and the background worker.",
+  "exports": {
+    "./canon-index": "./src/canon-index.ts",
+    "./context-builder": "./src/context-builder.ts",
+    "./onboarding": "./src/onboarding.ts",
+    "./prose-stream": "./src/prose-stream.ts",
+    "./scene-context": "./src/scene-context.ts",
+    "./story-events": "./src/story-events.ts",
+    "./story-state": "./src/story-state.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@behindthestory/ai": "workspace:*",
+    "@behindthestory/db": "workspace:*",
+    "ai": "^7.0.59",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}

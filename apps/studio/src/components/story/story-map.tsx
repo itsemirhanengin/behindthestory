@@ -15,7 +15,7 @@ import {
   type ThreadFilter,
   type ThreadSpan,
 } from "./thread-board";
-import type { Chapter, Character, StoryElement } from "@/db/schema";
+import type { Chapter, Character, StoryElement } from "@behindthestory/db/schema";
 
 function buildSlots(chapters: Chapter[]): Slot[] {
   const byNumber = new Map<number, Chapter[]>();

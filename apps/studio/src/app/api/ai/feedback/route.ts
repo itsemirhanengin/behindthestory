@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { aiSuggestionFeedback, getDb } from "@/db";
+import { aiSuggestionFeedback, getDb } from "@behindthestory/db";
 
 const decisionSchema = z.object({
   suggestionId: z.string().uuid(),

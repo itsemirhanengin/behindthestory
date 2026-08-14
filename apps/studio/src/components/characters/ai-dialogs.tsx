@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from "@/lib/api";
 import { relationshipColors } from "@/components/flow/relationship-edge";
-import type { Character, RelType } from "@/db/schema";
+import type { Character, RelType } from "@behindthestory/db/schema";
 
 type GeneratedCharacter = {
   name: string;

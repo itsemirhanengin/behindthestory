@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
-import { getDb, sessions, users, type SESSION_CLIENT_VALUES } from "@/db";
+import { getDb, sessions, users, type SESSION_CLIENT_VALUES } from "@behindthestory/db";
 
 export type SessionClient = (typeof SESSION_CLIENT_VALUES)[number];
 

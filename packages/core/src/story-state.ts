@@ -12,7 +12,7 @@ import type {
   Relationship,
   RelType,
   StoryEvent,
-} from "@/db/schema";
+} from "@behindthestory/db/schema";
 
 /** Read the newest state, ignoring where the author currently is in the novel. */
 export const LATEST = Number.POSITIVE_INFINITY;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { getDb } from "@/db";
-import { novelEntityTables, isNovelEntityName } from "@/db/registry";
+import { getDb } from "@behindthestory/db";
+import { novelEntityTables, isNovelEntityName } from "@behindthestory/db/registry";
 
 type Params = { params: Promise<{ novelId: string; entity: string }> };
 

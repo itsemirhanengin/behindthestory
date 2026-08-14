@@ -5,7 +5,7 @@ import {
   type NovelBundle,
 } from "./context-builder";
 import { buildRetrievalQuery, retrievePassages } from "./canon-index";
-import type { Chapter } from "@/db";
+import type { Chapter } from "@behindthestory/db";
 
 export type SceneContextInput = {
   novelId: string;

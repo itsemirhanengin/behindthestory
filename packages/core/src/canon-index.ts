@@ -1,7 +1,7 @@
 import { embed, embedMany } from "ai";
 import { and, cosineDistance, desc, eq, gt, ne, sql } from "drizzle-orm";
-import { getDb, canonChunks, type Chapter } from "@/db";
-import { MODELS } from "./ai";
+import { getDb, canonChunks, type Chapter } from "@behindthestory/db";
+import { MODELS } from "@behindthestory/ai";
 import { estimateTokens, type RetrievedPassage } from "./context-builder";
 
 /** Target size of an indexed passage. Big enough to hold a scene beat. */

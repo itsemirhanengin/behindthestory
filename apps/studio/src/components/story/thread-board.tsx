@@ -3,7 +3,7 @@
 import { RiAlertLine, RiCheckLine } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { elementStyles } from "@/components/flow/element-node";
-import type { StoryElement } from "@/db/schema";
+import type { StoryElement } from "@behindthestory/db/schema";
 
 export type ThreadSpan = {
   element: StoryElement;

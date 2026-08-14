@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { Character, Location } from "@/db/schema";
+import type { Character, Location } from "@behindthestory/db/schema";
 
 type Props = {
   novelId: string;

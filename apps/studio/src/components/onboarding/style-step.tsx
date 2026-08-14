@@ -21,7 +21,7 @@ import {
   readingMinutes,
   type StyleFields,
   type StyleProposal,
-} from "@/lib/onboarding";
+} from "@behindthestory/core/onboarding";
 
 function Segmented<T extends string>({
   options,

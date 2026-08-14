@@ -117,7 +117,7 @@ export async function consumeProseStream(
   },
 ): Promise<void> {
   if (!res.ok || !res.body) {
-    const body = await res.json().catch(() => ({}) as { error?: string });
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `AI request failed (${res.status})`);
   }
 

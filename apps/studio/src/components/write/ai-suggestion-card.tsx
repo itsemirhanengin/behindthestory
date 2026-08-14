@@ -12,7 +12,7 @@ import {
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ProsePhase, ProseUsage } from "@/lib/prose-stream";
+import type { ProsePhase, ProseUsage } from "@behindthestory/core/prose-stream";
 
 export type AiSuggestion = {
   id: string;

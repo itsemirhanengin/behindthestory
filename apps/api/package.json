@@ -1,0 +1,37 @@
+{
+  "name": "@behindthestory/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./type": "./src/app.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist/index.js",
+    "start": "node --env-file=.env dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@behindthestory/ai": "workspace:*",
+    "@behindthestory/core": "workspace:*",
+    "@behindthestory/db": "workspace:*",
+    "@hono/zod-validator": "^0.7.4",
+    "@react-email/components": "^1.0.12",
+    "ai": "^7.0.59",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.10.7",
+    "ioredis": "^6.0.0",
+    "react": "19.2.8",
+    "resend": "^6.19.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1.19.5",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "esbuild": "^0.25.12",
+    "tsx": "^4.20.6",
+    "typescript": "^5"
+  }
+}

@@ -7,9 +7,9 @@ import {
   characterFacts,
   locations,
   storyElements,
-} from "@/db";
-import { loadStoryEvents } from "@/lib/story-events";
-import { charactersAsOf } from "@/lib/story-state";
+} from "@behindthestory/db";
+import { loadStoryEvents } from "@behindthestory/core/story-events";
+import { charactersAsOf } from "@behindthestory/core/story-state";
 
 type Params = { params: Promise<{ novelId: string }> };
 

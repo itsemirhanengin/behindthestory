@@ -36,8 +36,8 @@ import {
   type StyleResponse,
   type WizardTurn,
   type WizardUsage,
-} from "@/lib/onboarding";
-import type { Novel } from "@/db/schema";
+} from "@behindthestory/core/onboarding";
+import type { Novel } from "@behindthestory/db/schema";
 import { PremiseStep } from "./premise-step";
 import { AlignmentStep } from "./alignment-step";
 import { StyleStep } from "./style-step";

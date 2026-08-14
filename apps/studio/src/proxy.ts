@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { SESSION_COOKIE } from "@/lib/auth/session";
+/**
+ * Duplicated from the API rather than imported: proxy code must not pull in
+ * server modules, and this is a wire-format constant — if it ever changes, every
+ * existing session is invalidated anyway.
+ */
+const SESSION_COOKIE = "bts_session";
+
+const PUBLIC_PATHS = ["/sign-in"];
 
 /**
  * A cheap gate, not the authorisation.
@@ -9,13 +16,11 @@ import { SESSION_COOKIE } from "@/lib/auth/session";
  * This only asks whether a session cookie is present — it never validates it,
  * because proxy code runs ahead of the render and is not meant to reach for the
  * database. Deciding whether the token is real, unexpired and allowed to touch
- * a given novel stays in the route handlers, where the ownership check lives.
+ * a given novel stays in the API, where the ownership check lives.
  *
  * What this buys is the redirect: a signed-out visitor lands on /sign-in
  * instead of on a page that would render empty and then fail.
  */
-const PUBLIC_PATHS = ["/sign-in"];
-
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 

@@ -43,7 +43,7 @@ import {
   consumeProseStream,
   type ProsePhase,
   type ProseUsage,
-} from "@/lib/prose-stream";
+} from "@behindthestory/core/prose-stream";
 import { useNovelWorkspace } from "@/components/novel-workspace";
 import { AnalyzeDialog } from "./analyze-dialog";
 import { AssistComposer } from "./assist-composer";
@@ -73,7 +73,7 @@ import type {
   Relationship,
   StoryElement,
   StoryEvent,
-} from "@/db/schema";
+} from "@behindthestory/db/schema";
 import type { ContextSelection } from "./context-panel";
 
 const INLINE_ACTIONS = [

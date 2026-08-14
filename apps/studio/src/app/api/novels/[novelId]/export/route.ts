@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { getDb, novels, chapters } from "@/db";
-import { activeSpine } from "@/lib/context-builder";
+import { getDb, novels, chapters } from "@behindthestory/db";
+import { activeSpine } from "@behindthestory/core/context-builder";
 
 type Params = { params: Promise<{ novelId: string }> };
 

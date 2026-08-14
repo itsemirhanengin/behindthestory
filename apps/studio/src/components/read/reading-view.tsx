@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { MarkdownProse } from "./markdown-prose";
-import type { Chapter, Novel } from "@/db/schema";
+import type { Chapter, Novel } from "@behindthestory/db/schema";
 
 export function ReadingView({ novelId }: { novelId: string }) {
   const [novel, setNovel] = useState<Novel | null>(null);

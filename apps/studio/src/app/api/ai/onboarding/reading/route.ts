@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { MODELS, NOVELIST_PERSONA } from "@/lib/ai";
+import { MODELS, NOVELIST_PERSONA } from "@behindthestory/ai";
 import {
   MIN_DESCRIPTION_WORDS,
   countWords,
   type Reading,
   type ReadingResponse,
-} from "@/lib/onboarding";
+} from "@behindthestory/core/onboarding";
 
 export const maxDuration = 300;
 
