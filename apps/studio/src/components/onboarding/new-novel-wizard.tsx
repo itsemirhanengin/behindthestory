@@ -298,7 +298,7 @@ export function NewNovelWizard() {
           <div className="flex min-w-0 items-center gap-2.5">
             <RiBookOpenLine className="size-4 shrink-0 text-primary" />
             <span className="font-heading text-sm font-semibold tracking-tight">
-              StoryForge
+              BehindTheStory
             </span>
             <span className="text-border">/</span>
             <span className="truncate text-sm text-muted-foreground">

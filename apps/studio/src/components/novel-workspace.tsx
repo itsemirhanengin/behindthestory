@@ -22,7 +22,7 @@ export function NovelWorkspaceProvider({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      const saved = window.localStorage.getItem("storyforge:sidebar-open");
+      const saved = window.localStorage.getItem("behindthestory:sidebar-open");
       if (saved !== null) setSidebarOpen(saved === "true");
     });
     return () => window.cancelAnimationFrame(frame);
@@ -34,12 +34,12 @@ export function NovelWorkspaceProvider({
       mobileNavigationOpen,
       setSidebarOpen: (open) => {
         setSidebarOpen(open);
-        window.localStorage.setItem("storyforge:sidebar-open", String(open));
+        window.localStorage.setItem("behindthestory:sidebar-open", String(open));
       },
       setMobileNavigationOpen,
       toggleSidebar: () => {
         setSidebarOpen((open) => {
-          window.localStorage.setItem("storyforge:sidebar-open", String(!open));
+          window.localStorage.setItem("behindthestory:sidebar-open", String(!open));
           return !open;
         });
       },

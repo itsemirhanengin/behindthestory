@@ -51,11 +51,11 @@ type SuggestionMeta =
   | { type: "clear" };
 
 const suggestionKey = new PluginKey<TrackedSuggestion | null>(
-  "storyforge-ai-suggestion",
+  "behindthestory-ai-suggestion",
 );
 
 const SuggestionRange = Extension.create({
-  name: "storyforgeSuggestionRange",
+  name: "behindthestorySuggestionRange",
 
   addProseMirrorPlugins() {
     return [
@@ -98,7 +98,7 @@ const SuggestionRange = Extension.create({
                     marker.setAttribute("aria-hidden", "true");
                     return marker;
                   },
-                  { key: "storyforge-ai-anchor", side: -1 },
+                  { key: "behindthestory-ai-anchor", side: -1 },
                 ),
               ]);
             }

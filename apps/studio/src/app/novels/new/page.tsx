@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { NewNovelWizard } from "@/components/onboarding/new-novel-wizard";
 
 export const metadata: Metadata = {
-  title: "New novel · StoryForge",
+  title: "New novel · BehindTheStory",
 };
 
 // A static segment, so it wins over `/novels/[novelId]` and stays outside that

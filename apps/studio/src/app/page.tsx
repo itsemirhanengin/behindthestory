@@ -44,7 +44,7 @@ export default function HomePage() {
       <div className="mb-10 flex items-end justify-between">
         <div>
           <h1 className="flex items-center gap-3 font-heading text-3xl font-semibold tracking-tight">
-            <RiBookOpenLine className="size-8 text-primary" /> StoryForge
+            <RiBookOpenLine className="size-8 text-primary" /> BehindTheStory
           </h1>
           <p className="mt-2 text-muted-foreground">
             Your AI-assisted novel writing studio.

@@ -20,11 +20,11 @@ const EMPTY: BlockSelectionState = {
 };
 
 export const blockSelectionKey = new PluginKey<BlockSelectionState>(
-  "storyforge-block-selection",
+  "behindthestory-block-selection",
 );
 
 export const BlockSelection = Extension.create({
-  name: "storyforgeBlockSelection",
+  name: "behindthestoryBlockSelection",
 
   addProseMirrorPlugins() {
     return [

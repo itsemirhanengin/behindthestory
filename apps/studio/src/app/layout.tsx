@@ -21,7 +21,7 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "StoryForge",
+  title: "BehindTheStory",
   description: "AI-assisted novel writing studio",
 };
 

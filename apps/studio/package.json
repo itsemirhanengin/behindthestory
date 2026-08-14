@@ -1,5 +1,5 @@
 {
-  "name": "story-ai",
+  "name": "@behindthestory/studio",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,8 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
     "db:setup": "node --env-file=.env.local scripts/db-setup.mjs",
-    "db:push": "npm run db:setup && node --env-file=.env.local node_modules/drizzle-kit/bin.cjs push",
+    "db:push": "pnpm run db:setup && node --env-file=.env.local node_modules/drizzle-kit/bin.cjs push",
     "db:clean": "node --env-file=.env.local scripts/db-clean.mjs",
     "db:migrate-events": "node --env-file=.env.local scripts/migrate-to-events.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed.mjs",
@@ -18,6 +19,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@neondatabase/serverless": "^1.1.0",
     "@remixicon/react": "^4.9.0",
+    "@tiptap/core": "^3.30.0",
     "@tiptap/extension-unique-id": "^3.30.0",
     "@tiptap/markdown": "^3.30.0",
     "@tiptap/pm": "^3.30.0",
@@ -51,11 +53,5 @@
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
-  },
-  "allowScripts": {
-    "esbuild@0.18.20": true,
-    "esbuild@0.25.12": true,
-    "esbuild@0.28.2": true,
-    "unrs-resolver@1.12.2": true
   }
 }
