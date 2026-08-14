@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { HTTPException } from "hono/http-exception";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { getDb } from "@behindthestory/db";
 import { entityTables, isEntityName } from "@behindthestory/db/registry";
@@ -114,7 +114,16 @@ export const entityRoutes = new Hono<AuthEnv>()
       .set(body)
       .where(
         expected
-          ? and(eq(table.id, id), eq(version as never, expected))
+          ? // Compared at millisecond grain on BOTH sides: rows stamped by
+            // Postgres `now()` (the insert default) carry microseconds, while a
+            // JavaScript Date — which is what every client echoes back — can
+            // only ever say milliseconds. Raw equality therefore failed on any
+            // row that had never been updated from JS, which made the very
+            // first versioned save of a fresh row a guaranteed 409.
+            and(
+              eq(table.id, id),
+              sql`date_trunc('milliseconds', ${version as never}) = date_trunc('milliseconds', ${expected})`,
+            )
           : eq(table.id, id),
       )
       .returning();
