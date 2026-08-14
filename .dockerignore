@@ -1,0 +1,26 @@
+# The build stage runs `pnpm install` itself; a host node_modules would be the
+# wrong platform's binaries and would dwarf the build context.
+node_modules
+**/node_modules
+
+# Build outputs are produced inside the image.
+.next
+**/.next
+dist
+**/dist
+.turbo
+**/.turbo
+
+# Secrets. Railway injects the real values as service variables; if these were
+# copied in they would also bake into an image layer.
+.env
+.env.*
+**/.env
+**/.env.*
+
+.git
+.gitignore
+.vercel
+**/.vercel
+.DS_Store
+**/*.log

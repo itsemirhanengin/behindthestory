@@ -1,8 +1,25 @@
+import path from "node:path";
+
 import type { NextConfig } from "next";
 
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
 
 const nextConfig: NextConfig = {
+  /**
+   * Railway runs this as a container, not on Vercel. `standalone` emits
+   * `.next/standalone` with only the traced files plus a `server.js`, so the
+   * runtime image carries no `node_modules` install of its own.
+   */
+  output: "standalone",
+
+  /**
+   * Tracing defaults to the directory holding this config, which would cut off
+   * everything in `packages/*` and the pnpm store at the repo root. Scripts run
+   * with the package directory as cwd (both `next build` here and `turbo build`
+   * from the root), so the monorepo root is two levels up.
+   */
+  outputFileTracingRoot: path.join(process.cwd(), "../.."),
+
   /**
    * Workspace packages ship TypeScript source rather than a build output, so
    * Next compiles them alongside the app. This is what lets `packages/*` have
