@@ -9,9 +9,9 @@ import {
   generateCode,
   normalizeEmail,
   storeCode,
-} from "@/lib/auth/otp";
-import { OTP_LIMITS, rateLimit } from "@/lib/auth/rate-limit";
-import { clientIp } from "@/lib/auth/request";
+} from "#lib/auth/otp";
+import { OTP_LIMITS, rateLimit } from "#lib/auth/rate-limit";
+import { clientIp } from "#lib/auth/request";
 import {
   SESSION_COOKIE,
   SESSION_TTL_DAYS,
@@ -19,9 +19,9 @@ import {
   resolveSession,
   revokeSession,
   startSession,
-} from "@/lib/auth/session";
-import { sendSignInCode } from "@/lib/email/send";
-import { requireAuth, sessionToken, type AuthEnv } from "@/middleware/auth";
+} from "#lib/auth/session";
+import { sendSignInCode } from "#lib/email/send";
+import { requireAuth, sessionToken, type AuthEnv } from "#middleware/auth";
 
 const FAILURES = {
   invalid: { status: 400, error: "That code is not right." },

@@ -2,8 +2,14 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 
-import { authRoutes } from "@/routes/auth";
-import { novelRoutes } from "@/routes/novels";
+import { authRoutes } from "#routes/auth";
+import { chapterRoutes } from "#routes/chapters";
+import { entityRoutes } from "#routes/entities";
+import { novelContentRoutes } from "#routes/novel-content";
+import { novelMergeRoutes } from "#routes/novel-merge";
+import { novelSearchRoutes } from "#routes/novel-search";
+import { novelTimelineRoutes } from "#routes/novel-timeline";
+import { novelRoutes } from "#routes/novels";
 
 /**
  * The API surface.
@@ -15,7 +21,13 @@ import { novelRoutes } from "@/routes/novels";
  */
 const routes = new Hono()
   .route("/api/auth", authRoutes)
-  .route("/api/novels", novelRoutes);
+  .route("/api/novels", novelRoutes)
+  .route("/api/novels", novelTimelineRoutes)
+  .route("/api/novels", novelSearchRoutes)
+  .route("/api/novels", novelMergeRoutes)
+  .route("/api/novels", novelContentRoutes)
+  .route("/api/chapters", chapterRoutes)
+  .route("/api/entities", entityRoutes);
 
 export const app = new Hono()
   .use("*", logger())
@@ -33,6 +45,9 @@ export const app = new Hono()
   })
   .get("/health", (c) => c.json({ ok: true }))
   .route("/", routes);
+
+/** Shared with the web client so its search UI is typed off the server. */
+export type { SearchHit } from "#routes/novel-search";
 
 /** Consumed by the web and mobile clients to type their calls. */
 export type AppType = typeof routes;

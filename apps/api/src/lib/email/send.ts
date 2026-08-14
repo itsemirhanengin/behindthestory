@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
-import { SignInCodeEmail } from "@/lib/email/templates/sign-in-code";
-import { OTP_TTL_SECONDS } from "@/lib/auth/otp";
+import { SignInCodeEmail } from "#lib/email/templates/sign-in-code";
+import { OTP_TTL_SECONDS } from "#lib/auth/otp";
 
 let _resend: Resend | null = null;
 

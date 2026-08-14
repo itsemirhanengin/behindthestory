@@ -7,8 +7,8 @@ import {
   SESSION_COOKIE,
   resolveSession,
   type AuthenticatedUser,
-} from "@/lib/auth/session";
-import { ownsChapter, ownsNovel } from "@/lib/auth/ownership";
+} from "#lib/auth/session";
+import { ownsChapter, ownsNovel } from "#lib/auth/ownership";
 
 export type AuthEnv = {
   Variables: {

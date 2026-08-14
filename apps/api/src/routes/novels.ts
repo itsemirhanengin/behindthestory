@@ -11,7 +11,7 @@ import {
 } from "@behindthestory/db";
 import { logGeneration } from "@behindthestory/ai";
 
-import { assertNovel, requireAuth, type AuthEnv } from "@/middleware/auth";
+import { assertNovel, requireAuth, type AuthEnv } from "#middleware/auth";
 
 /**
  * The new-novel wizard sends the whole style contract in one shot, since it has

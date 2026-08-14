@@ -19,7 +19,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { api } from "@/lib/api";
-import type { SearchHit } from "@/app/api/novels/[novelId]/search/route";
+import type { SearchHit } from "@behindthestory/api/type";
 
 const GROUPS: { kind: SearchHit["kind"]; label: string; icon: typeof RiUserLine }[] = [
   { kind: "chapter", label: "Manuscript", icon: RiBookLine },

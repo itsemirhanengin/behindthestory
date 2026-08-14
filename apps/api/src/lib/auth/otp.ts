@@ -1,6 +1,6 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 
-import { getRedis } from "@/lib/redis";
+import { getRedis } from "#lib/redis";
 
 /**
  * Six digits, not four.

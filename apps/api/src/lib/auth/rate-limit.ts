@@ -1,4 +1,4 @@
-import { getRedis } from "@/lib/redis";
+import { getRedis } from "#lib/redis";
 
 export type RateLimitResult = {
   allowed: boolean;

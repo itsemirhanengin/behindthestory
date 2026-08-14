@@ -20,19 +20,18 @@ const nextConfig: NextConfig = {
    * there is no CORS config and no `credentials: "include"` anywhere in the
    * client.
    *
-   * Only migrated paths are listed. Everything still served by this app's own
-   * route handlers falls through untouched, which is what makes the port
-   * incremental rather than a cutover.
+   * Only migrated paths are listed; `/api/ai/*` is still served by this app's
+   * own route handlers and falls through untouched, which is what makes the
+   * port incremental rather than a cutover.
    *
    * Mobile skips this entirely and calls the API directly with a bearer token.
    */
   async rewrites() {
     return [
       { source: "/api/auth/:path*", destination: `${API_URL}/api/auth/:path*` },
-      { source: "/api/novels", destination: `${API_URL}/api/novels` },
-      // One segment only — `/api/novels/:id/search` and friends still belong to
-      // this app until they are ported.
-      { source: "/api/novels/:novelId", destination: `${API_URL}/api/novels/:novelId` },
+      { source: "/api/novels/:path*", destination: `${API_URL}/api/novels/:path*` },
+      { source: "/api/chapters/:path*", destination: `${API_URL}/api/chapters/:path*` },
+      { source: "/api/entities/:path*", destination: `${API_URL}/api/entities/:path*` },
     ];
   },
 };

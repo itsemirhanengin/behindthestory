@@ -33,5 +33,10 @@
     "esbuild": "^0.25.12",
     "tsx": "^4.20.6",
     "typescript": "^5"
+  },
+  "imports": {
+    "//": "esbuild takes the first pattern that matches rather than falling through the list, so the one .tsx file gets an explicit entry. Exact keys win over the wildcard.",
+    "#lib/email/templates/sign-in-code": "./src/lib/email/templates/sign-in-code.tsx",
+    "#*": "./src/*.ts"
   }
 }

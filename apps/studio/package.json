@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@behindthestory/ai": "workspace:*",
+    "@behindthestory/api": "workspace:*",
     "@behindthestory/core": "workspace:*",
     "@behindthestory/db": "workspace:*",
     "@dnd-kit/core": "^6.3.1",
