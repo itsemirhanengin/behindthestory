@@ -20,9 +20,14 @@ import type {
  * comes from `chapterNumber` and `createdAt` only as a tiebreak — so the
  * signatures accept either rather than forcing one side to convert a field it
  * never looks at.
+ *
+ * Every timestamp on the row has to be listed here, not just the ones this file
+ * uses: assignability is checked field by field, so one un-widened `Date` is
+ * enough to reject a whole wire row at every call site.
  */
-export type StoryEvent = Omit<DbStoryEvent, "createdAt"> & {
+export type StoryEvent = Omit<DbStoryEvent, "createdAt" | "updatedAt"> & {
   createdAt: Date | string;
+  updatedAt: Date | string;
 };
 
 /** Read the newest state, ignoring where the author currently is in the novel. */
