@@ -16,7 +16,8 @@ import {
   RiSparkling2Line,
 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
+import { useNovel } from "@/lib/queries/novels";
+import { useEntityList } from "@/lib/queries/entities";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -28,7 +29,7 @@ import {
 import { ManuscriptSearch } from "@/components/manuscript-search";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useNovelWorkspace } from "@/components/novel-workspace";
-import type { Chapter, Novel } from "@behindthestory/db/schema";
+import type { Chapter, Novel } from "@/lib/queries/types";
 
 const sections = [
   { slug: "bible", label: "Story Bible", icon: RiBookMarkedLine },
@@ -44,8 +45,8 @@ function words(text: string) {
 
 export function NovelSidebar({ novelId }: { novelId: string }) {
   const pathname = usePathname();
-  const [novel, setNovel] = useState<Novel | null>(null);
-  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const { data: novel = null } = useNovel(novelId);
+  const { data: allChapters } = useEntityList<Chapter>(novelId, "chapters");
   const {
     sidebarOpen,
     mobileNavigationOpen,
@@ -55,20 +56,10 @@ export function NovelSidebar({ novelId }: { novelId: string }) {
   const writingRoute = pathname.includes("/write/");
   const showDesktopSidebar = !writingRoute || sidebarOpen;
 
-  useEffect(() => {
-    api.get<Novel>(`/api/novels/${novelId}`).then(setNovel).catch(() => {});
-  }, [novelId]);
-
-  useEffect(() => {
-    api
-      .get<Chapter[]>(`/api/novels/${novelId}/chapters`)
-      .then((rows) =>
-        setChapters(
-          rows.filter((chapter) => chapter.isActive).sort((a, b) => a.number - b.number),
-        ),
-      )
-      .catch(() => {});
-  }, [novelId, pathname]);
+  // Only the active variant of each slot belongs in the spine.
+  const chapters = (allChapters ?? [])
+    .filter((chapter) => chapter.isActive)
+    .sort((a, b) => a.number - b.number);
 
   const content = (
     <SidebarContent

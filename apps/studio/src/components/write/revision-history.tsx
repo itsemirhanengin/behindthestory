@@ -18,9 +18,10 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
+import { fetchEntity } from "@/lib/queries/entities";
+import { useRevisions, useSaveRevision } from "@/lib/queries/chapters";
 import { cn } from "@/lib/utils";
-import type { ChapterRevision } from "@behindthestory/db/schema";
+import type { ChapterRevision } from "@/lib/queries/types";
 
 type RevisionSummary = Pick<
   ChapterRevision,
@@ -52,20 +53,18 @@ export function RevisionHistory({
   currentContent,
   onRestore,
 }: Props) {
-  const [revisions, setRevisions] = useState<RevisionSummary[] | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [preview, setPreview] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const saveRevision = useSaveRevision(chapterId);
+  // Only while the dialog is open — history is not chrome.
+  const { data, isError, refetch } = useRevisions(chapterId, { enabled: open });
+  const revisions: RevisionSummary[] | null =
+    data === undefined && !isError ? null : (data ?? []);
 
   const load = useCallback(() => {
-    api
-      .get<RevisionSummary[]>(`/api/chapters/${chapterId}/revisions`)
-      .then(setRevisions)
-      .catch((e) => {
-        toast.error((e as Error).message);
-        setRevisions([]);
-      });
-  }, [chapterId]);
+    void refetch();
+  }, [refetch]);
 
   useEffect(() => {
     if (open) load();
@@ -75,9 +74,7 @@ export function RevisionHistory({
     setPreviewId(id);
     setPreview("");
     try {
-      const row = await api.get<ChapterRevision>(
-        `/api/entities/chapter-revisions/${id}`,
-      );
+      const row = await fetchEntity<ChapterRevision>("chapter-revisions", id);
       setPreview(row.content);
     } catch (e) {
       toast.error((e as Error).message);
@@ -87,15 +84,10 @@ export function RevisionHistory({
   async function restore(id: string) {
     setBusy(true);
     try {
-      const row = await api.get<ChapterRevision>(
-        `/api/entities/chapter-revisions/${id}`,
-      );
+      const row = await fetchEntity<ChapterRevision>("chapter-revisions", id);
       // Snapshot what is on screen first, otherwise restoring destroys it.
-      await api
-        .post(`/api/chapters/${chapterId}/revisions`, {
-          label: "before restore",
-          content: currentContent(),
-        })
+      await saveRevision
+        .mutateAsync({ label: "before restore", content: currentContent() })
         .catch(() => {});
       onRestore(row.content);
       toast.success("Revision restored — the previous text was saved first");
@@ -127,12 +119,12 @@ export function RevisionHistory({
             onClick={async () => {
               setBusy(true);
               try {
-                const result = await api.post<{ unchanged?: boolean }>(
-                  `/api/chapters/${chapterId}/revisions`,
-                  { label: "manual", content: currentContent() },
-                );
+                const result = await saveRevision.mutateAsync({
+                  label: "manual",
+                  content: currentContent(),
+                });
                 toast.success(
-                  result.unchanged
+                  "unchanged" in result && result.unchanged
                     ? "Already snapshotted — nothing has changed since."
                     : "Version saved",
                 );

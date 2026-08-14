@@ -24,13 +24,19 @@ import {
   RiSparkling2Line,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import {
+  useCreateEntity,
+  useDeleteEntity,
+  useEntityList,
+  useUpdateEntity,
+} from "@/lib/queries/entities";
+import { useAiLocation } from "@/lib/queries/ai";
 import {
   LocationNode,
   type LocationNodeType,
 } from "@/components/flow/location-node";
 import { LocationSheet } from "./location-sheet";
-import type { Character, Location, LocationLink } from "@behindthestory/db/schema";
+import type { Character, Location, LocationLink } from "@/lib/queries/types";
 
 const nodeTypes = { location: LocationNode };
 
@@ -70,20 +76,28 @@ export function LocationsCanvas({ novelId }: { novelId: string }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
 
+  const locationsQuery = useEntityList<Location>(novelId, "locations");
+  const linksQuery = useEntityList<LocationLink>(novelId, "location-links");
+  const charactersQuery = useEntityList<Character>(novelId, "characters");
+  const createLocation = useCreateEntity<Location>(novelId, "locations");
+  const createLink = useCreateEntity<LocationLink>(novelId, "location-links");
+  const updateEntity = useUpdateEntity<LocationLink>(novelId);
+  const deleteEntity = useDeleteEntity(novelId);
+  const suggest = useAiLocation();
+
+  // The canvas holds its own node/edge state because dragging writes positions
+  // continuously; the queries seed it and re-seed when the novel's data changes
+  // underneath, which is why this stays an effect rather than derived state.
   useEffect(() => {
-    Promise.all([
-      api.get<Location[]>(`/api/novels/${novelId}/locations`),
-      api.get<LocationLink[]>(`/api/novels/${novelId}/location-links`),
-      api.get<Character[]>(`/api/novels/${novelId}/characters`),
-    ])
-      .then(([locs, links, chars]) => {
-        setLocationsList(locs);
-        setCharacters(chars);
-        setNodes(locs.map((l) => toNode(l, chars)));
-        setEdges(links.map(toEdge));
-      })
-      .catch((e) => toast.error(e.message));
-  }, [novelId, setNodes, setEdges]);
+    const locs = locationsQuery.data;
+    const links = linksQuery.data;
+    const chars = charactersQuery.data;
+    if (!locs || !links || !chars) return;
+    setLocationsList(locs);
+    setCharacters(chars);
+    setNodes(locs.map((l) => toNode(l, chars)));
+    setEdges(links.map(toEdge));
+  }, [locationsQuery.data, linksQuery.data, charactersQuery.data, setNodes, setEdges]);
 
   const upsertLocation = useCallback(
     (l: Location) => {
@@ -109,20 +123,17 @@ export function LocationsCanvas({ novelId }: { novelId: string }) {
     async (conn: Connection) => {
       if (conn.source === conn.target) return;
       try {
-        const link = await api.post<LocationLink>(
-          `/api/novels/${novelId}/location-links`,
-          {
-            sourceLocationId: conn.source,
-            targetLocationId: conn.target,
-            label: "",
-          },
-        );
+        const link = await createLink.mutateAsync({
+          sourceLocationId: conn.source,
+          targetLocationId: conn.target,
+          label: "",
+        });
         setEdges((es) => [...es, toEdge(link)]);
       } catch (e) {
         toast.error((e as Error).message);
       }
     },
-    [novelId, setEdges],
+    [createLink, setEdges],
   );
 
   const onEdgeClick: EdgeMouseHandler<Edge> = useCallback(
@@ -133,19 +144,22 @@ export function LocationsCanvas({ novelId }: { novelId: string }) {
       );
       if (label === null) return;
       if (label === "-") {
-        await api.del(`/api/entities/location-links/${edge.id}`).catch(() => {});
+        await deleteEntity
+          .mutateAsync({ entity: "location-links", id: edge.id })
+          .catch(() => {});
         setEdges((es) => es.filter((x) => x.id !== edge.id));
         return;
       }
-      const updated = await api.patch<LocationLink>(
-        `/api/entities/location-links/${edge.id}`,
-        { label },
-      );
+      const updated = await updateEntity.mutateAsync({
+        entity: "location-links",
+        id: edge.id,
+        values: { label },
+      });
       setEdges((es) =>
         es.map((x) => (x.id === edge.id ? toEdge(updated) : x)),
       );
     },
-    [setEdges],
+    [deleteEntity, updateEntity, setEdges],
   );
 
   const onNodeClick: NodeMouseHandler<LocationNodeType> = useCallback(
@@ -156,25 +170,28 @@ export function LocationsCanvas({ novelId }: { novelId: string }) {
     [],
   );
 
-  const onNodeDragStop = useCallback((_e: unknown, node: Node) => {
-    api
-      .patch(`/api/entities/locations/${node.id}`, {
-        posX: node.position.x,
-        posY: node.position.y,
-      })
-      .catch(() => {});
-  }, []);
+  const onNodeDragStop = useCallback(
+    (_e: unknown, node: Node) => {
+      // Fire and forget: a dropped position that fails to save is not worth
+      // interrupting the author over, and the next drag will try again.
+      updateEntity
+        .mutateAsync({
+          entity: "locations",
+          id: node.id,
+          values: { posX: node.position.x, posY: node.position.y },
+        })
+        .catch(() => {});
+    },
+    [updateEntity],
+  );
 
   async function addLocation() {
     try {
-      const created = await api.post<Location>(
-        `/api/novels/${novelId}/locations`,
-        {
-          name: `Location ${locationsList.length + 1}`,
-          posX: 120 + Math.random() * 400,
-          posY: 120 + Math.random() * 300,
-        },
-      );
+      const created = await createLocation.mutateAsync({
+        name: `Location ${locationsList.length + 1}`,
+        posX: 120 + Math.random() * 400,
+        posY: 120 + Math.random() * 300,
+      });
       upsertLocation(created);
       setSelected(created);
       setSheetOpen(true);
@@ -186,21 +203,13 @@ export function LocationsCanvas({ novelId }: { novelId: string }) {
   async function suggestLocation() {
     setAiBusy(true);
     try {
-      const out = await api.post<{
-        name: string;
-        description: string;
-        atmosphere: string;
-        significance: string;
-      }>("/api/ai/location", { novelId });
-      const created = await api.post<Location>(
-        `/api/novels/${novelId}/locations`,
-        {
-          ...out,
-          origin: "ai",
-          posX: 120 + Math.random() * 400,
-          posY: 120 + Math.random() * 300,
-        },
-      );
+      const out = await suggest.mutateAsync({ novelId });
+      const created = await createLocation.mutateAsync({
+        ...out,
+        origin: "ai",
+        posX: 120 + Math.random() * 400,
+        posY: 120 + Math.random() * 300,
+      });
       upsertLocation(created);
       toast.success(`"${created.name}" added to the world`);
     } catch (e) {

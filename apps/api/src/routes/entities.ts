@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
 
@@ -50,7 +52,10 @@ export const entityRoutes = new Hono<AuthEnv>()
     );
     return c.json(row);
   })
-  .patch("/:entity/:id", async (c) => {
+  /* A free-form record by design: the shape is whatever the chosen table
+     accepts, and the registry is where that mapping lives. Declaring it here
+     anyway is what lets the RPC client send a typed body at all. */
+  .patch("/:entity/:id", zValidator("json", z.record(z.string(), z.unknown())), async (c) => {
     const id = c.req.param("id");
     const { table } = await loadOwned(
       c.get("user").id,
@@ -58,7 +63,7 @@ export const entityRoutes = new Hono<AuthEnv>()
       id,
     );
 
-    const body = (await c.req.json()) as Record<string, unknown>;
+    const body = { ...c.req.valid("json") };
     // Identity and parentage are not editable: letting `novelId` through would
     // let a caller move a row into a novel they own and read it back.
     delete body.id;

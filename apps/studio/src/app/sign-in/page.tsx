@@ -8,7 +8,7 @@ import { RiArrowLeftLine, RiBookOpenLine, RiLoader4Line } from "@remixicon/react
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api } from "@/lib/api";
+import { useRequestCode, useVerifyCode } from "@/lib/queries/session";
 
 type Step = "email" | "code";
 
@@ -17,7 +17,9 @@ export default function SignInPage() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
+  const requestCode = useRequestCode();
+  const verifyCode = useVerifyCode();
+  const busy = requestCode.isPending || verifyCode.isPending;
   /** Resending immediately is almost always a misread, not a lost email. */
   const [cooldown, setCooldown] = useState(0);
   const codeRef = useRef<HTMLInputElement>(null);
@@ -32,39 +34,35 @@ export default function SignInPage() {
     if (step === "code") codeRef.current?.focus();
   }, [step]);
 
-  async function requestCode(resend = false) {
+  function sendCode(resend = false) {
     if (!email.trim()) return;
-    setBusy(true);
-    try {
-      await api.post("/api/auth/otp/request", { email: email.trim() });
-      setStep("code");
-      setCooldown(30);
-      if (resend) toast.success("A new code is on its way.");
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    requestCode.mutate(email.trim(), {
+      onSuccess: () => {
+        setStep("code");
+        setCooldown(30);
+        if (resend) toast.success("A new code is on its way.");
+      },
+      onError: (error) => toast.error(error.message),
+    });
   }
 
-  async function verify(value: string) {
-    setBusy(true);
-    try {
-      await api.post("/api/auth/otp/verify", {
-        email: email.trim(),
-        code: value,
-        client: "web",
-      });
-      router.replace("/");
-      router.refresh();
-    } catch (error) {
-      toast.error((error as Error).message);
-      // Wrong codes are far more often mistyped than misread, so clear the
-      // field and keep focus rather than making them select-all first.
-      setCode("");
-      codeRef.current?.focus();
-      setBusy(false);
-    }
+  function verify(value: string) {
+    verifyCode.mutate(
+      { email: email.trim(), code: value },
+      {
+        onSuccess: () => {
+          router.replace("/");
+          router.refresh();
+        },
+        onError: (error) => {
+          toast.error(error.message);
+          // Wrong codes are far more often mistyped than misread, so clear the
+          // field and keep focus rather than making them select-all first.
+          setCode("");
+          codeRef.current?.focus();
+        },
+      },
+    );
   }
 
   function onCodeChange(raw: string) {
@@ -72,7 +70,7 @@ export default function SignInPage() {
     setCode(digits);
     // Six digits is the whole input — waiting for a button press after the last
     // one is a keystroke nobody needs.
-    if (digits.length === 6 && !busy) void verify(digits);
+    if (digits.length === 6 && !busy) verify(digits);
   }
 
   return (
@@ -87,7 +85,7 @@ export default function SignInPage() {
             className="mt-8"
             onSubmit={(event) => {
               event.preventDefault();
-              void requestCode();
+              sendCode();
             }}
           >
             <p className="text-muted-foreground">
@@ -154,7 +152,7 @@ export default function SignInPage() {
                 variant="ghost"
                 size="sm"
                 disabled={cooldown > 0 || busy}
-                onClick={() => void requestCode(true)}
+                onClick={() => sendCode(true)}
               >
                 {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
               </Button>

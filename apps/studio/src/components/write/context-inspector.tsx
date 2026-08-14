@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { api } from "@/lib/api";
+import { useAiContext } from "@/lib/queries/ai";
+import { useIndexChapter, useIndexStatus } from "@/lib/queries/chapters";
 import { cn } from "@/lib/utils";
 
 type ContextSection = {
@@ -63,36 +64,36 @@ export function ContextInspector({
   onOpenChange,
 }: Props) {
   const [context, setContext] = useState<BuiltContext | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
-  const [indexing, setIndexing] = useState(false);
+  const buildContext = useAiContext();
+  const loading = buildContext.isPending;
+  // Only fetched while the panel is open — it is a diagnostic, not chrome.
+  const { data: indexStatus = null, refetch: refetchIndex } = useIndexStatus(
+    chapterId,
+    { enabled: open },
+  );
+  const reindexChapter = useIndexChapter(chapterId);
+  const indexing = reindexChapter.isPending;
 
   const characterIds = [...selection.characterIds].join(",");
   const locationIds = [...selection.locationIds].join(",");
   const elementIds = [...selection.elementIds].join(",");
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
-      const built = await api.post<BuiltContext>("/api/ai/context", {
-        novelId,
-        chapterId,
-        selectedCharacterIds: characterIds ? characterIds.split(",") : [],
-        selectedLocationIds: locationIds ? locationIds.split(",") : [],
-        selectedElementIds: elementIds ? elementIds.split(",") : [],
-        instruction: instruction || undefined,
-        draftTail: draftTail?.().slice(-8000) || undefined,
-      });
-      setContext(built);
+      setContext(
+        await buildContext.mutateAsync({
+          novelId,
+          chapterId,
+          selectedCharacterIds: characterIds ? characterIds.split(",") : [],
+          selectedLocationIds: locationIds ? locationIds.split(",") : [],
+          selectedElementIds: elementIds ? elementIds.split(",") : [],
+          instruction: instruction || undefined,
+          draftTail: draftTail?.().slice(-8000) || undefined,
+        }),
+      );
     } catch (e) {
       toast.error((e as Error).message);
-    } finally {
-      setLoading(false);
     }
-    api
-      .get<IndexStatus>(`/api/chapters/${chapterId}/index`)
-      .then(setIndexStatus)
-      .catch(() => setIndexStatus(null));
     // `instruction`/`draftTail` are read at call time and must not retrigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novelId, chapterId, characterIds, locationIds, elementIds]);
@@ -104,24 +105,16 @@ export function ContextInspector({
   }, [open, load]);
 
   async function reindex() {
-    setIndexing(true);
     try {
-      const result = await api.post<{ chunks: number }>(
-        `/api/chapters/${chapterId}/index`,
-      );
+      const result = await reindexChapter.mutateAsync();
       toast.success(
-        result.chunks
+        "chunks" in result && result.chunks
           ? `Indexed ${result.chunks} passage(s) from this chapter`
           : "Nothing to index — this chapter is empty",
       );
-      const status = await api.get<IndexStatus>(
-        `/api/chapters/${chapterId}/index`,
-      );
-      setIndexStatus(status);
+      await refetchIndex();
     } catch (e) {
       toast.error((e as Error).message);
-    } finally {
-      setIndexing(false);
     }
   }
 

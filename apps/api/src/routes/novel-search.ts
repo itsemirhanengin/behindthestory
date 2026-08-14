@@ -88,11 +88,14 @@ export const novelSearchRoutes = new Hono<AuthEnv>()
    * "Where did I mention the broken seal?" is the question a novelist asks most
    * often, and until now the app had no answer for it.
    */
-  .get("/:novelId/search", async (c) => {
+  .get(
+    "/:novelId/search",
+    zValidator("query", z.object({ q: z.string().optional() })),
+    async (c) => {
     const novelId = c.req.param("novelId");
     await assertNovel(c.get("user").id, novelId);
 
-    const query = c.req.query("q")?.trim() ?? "";
+    const query = c.req.valid("query").q?.trim() ?? "";
     if (query.length < 2) return c.json({ hits: [] as SearchHit[] });
 
     const like = `%${query}%`;
@@ -230,7 +233,8 @@ export const novelSearchRoutes = new Hono<AuthEnv>()
     ];
 
     return c.json({ hits: hits.slice(0, 40) });
-  })
+    },
+  )
   .get("/:novelId/relationships", async (c) => {
     const novelId = c.req.param("novelId");
     await assertNovel(c.get("user").id, novelId);

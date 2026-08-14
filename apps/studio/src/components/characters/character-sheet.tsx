@@ -23,19 +23,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { api } from "@/lib/api";
+import {
+  useDeleteEntity,
+  useEntityList,
+  useUpdateEntity,
+} from "@/lib/queries/entities";
+import { useAiCharacter } from "@/lib/queries/ai";
+import { useCreateStoryEvent } from "@/lib/queries/story";
 import { cn } from "@/lib/utils";
 import { relationshipColors } from "@/components/flow/relationship-edge";
 import {
   CHAR_STATUS_VALUES,
   EVENT_IMPACT_VALUES,
   type CharStatus,
-  type Character,
-  type CharacterFact,
   type EventImpact,
-  type Relationship,
-  type StoryEvent,
 } from "@behindthestory/db/schema";
+import type {
+  Character,
+  CharacterFact,
+  Relationship,
+  StoryEvent,
+} from "@/lib/queries/types";
 import {
   causalTrace,
   characterStateAsOf,
@@ -122,13 +130,18 @@ export function CharacterSheet({
   // Canon facts extracted from chapters live in their own table, so they are
   // fetched rather than read off the character row.
   const characterId = character?.id;
+  const factsQuery = useEntityList<CharacterFact>(novelId, "character-facts", {
+    enabled: open && Boolean(characterId),
+  });
+  const updateEntity = useUpdateEntity<Character>(novelId);
+  const deleteEntity = useDeleteEntity(novelId);
+  const enrich = useAiCharacter();
+  const recordEvent = useCreateStoryEvent(novelId);
+
   useEffect(() => {
-    if (!open || !characterId) return;
-    api
-      .get<CharacterFact[]>(`/api/novels/${novelId}/character-facts`)
-      .then((rows) => setFacts(rows.filter((f) => f.characterId === characterId)))
-      .catch(() => setFacts([]));
-  }, [open, novelId, characterId]);
+    if (!factsQuery.data || !characterId) return;
+    setFacts(factsQuery.data.filter((f) => f.characterId === characterId));
+  }, [factsQuery.data, characterId]);
 
   if (!character) return null;
 
@@ -139,9 +152,10 @@ export function CharacterSheet({
     if (!character) return;
     setSaving(true);
     try {
-      const updated = await api.patch<Character>(
-        `/api/entities/characters/${character.id}`,
-        {
+      const updated = await updateEntity.mutateAsync({
+        entity: "characters",
+        id: character.id,
+        values: {
           name: form.name,
           role: form.role,
           summary: form.summary,
@@ -158,7 +172,7 @@ export function CharacterSheet({
             .map((t) => t.trim())
             .filter(Boolean),
         },
-      );
+      });
       onSaved(updated);
       toast.success("Character saved");
     } catch (e) {
@@ -172,19 +186,10 @@ export function CharacterSheet({
     if (!character) return;
     setAiBusy(true);
     try {
-      const out = await api.post<{
-        name: string;
-        role: Character["role"];
-        summary: string;
-        backstory: string;
-        traits: string[];
-        appearance: string;
-        secrets: string;
-        voice: string;
-        speechSample: string;
-        motivation: string;
-        arc: string;
-      }>("/api/ai/character", { novelId, characterId: character.id });
+      const out = await enrich.mutateAsync({
+        novelId,
+        characterId: character.id,
+      });
       set({
         summary: out.summary,
         backstory: out.backstory,
@@ -207,7 +212,10 @@ export function CharacterSheet({
   async function remove() {
     if (!character) return;
     try {
-      await api.del(`/api/entities/characters/${character.id}`);
+      await deleteEntity.mutateAsync({
+        entity: "characters",
+        id: character.id,
+      });
       onDeleted(character.id);
       onOpenChange(false);
     } catch (e) {
@@ -245,7 +253,7 @@ export function CharacterSheet({
     }
     setStatusBusy(true);
     try {
-      await api.post(`/api/novels/${novelId}/story-events`, {
+      await recordEvent.mutateAsync({
         characterId: character.id,
         status: newStatus,
         chapterNumber: statusChapter,
@@ -267,7 +275,7 @@ export function CharacterSheet({
 
   async function removeStatusEvent(id: string) {
     try {
-      await api.del(`/api/entities/story-events/${id}`);
+      await deleteEntity.mutateAsync({ entity: "story-events", id });
       onEventsChanged();
     } catch (e) {
       toast.error((e as Error).message);
@@ -471,9 +479,10 @@ export function CharacterSheet({
                           title="Remove this fact"
                           onClick={async () => {
                             try {
-                              await api.del(
-                                `/api/entities/character-facts/${f.id}`,
-                              );
+                              await deleteEntity.mutateAsync({
+                                entity: "character-facts",
+                                id: f.id,
+                              });
                               setFacts((l) => l.filter((x) => x.id !== f.id));
                             } catch (e) {
                               toast.error((e as Error).message);

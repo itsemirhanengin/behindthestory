@@ -30,18 +30,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { api } from "@/lib/api";
+import { useDeleteEntity, useUpdateEntity } from "@/lib/queries/entities";
+import {
+  useCreateRelationship,
+  useCreateStoryEvent,
+} from "@/lib/queries/story";
 import { cn } from "@/lib/utils";
 import { relationshipColors } from "@/components/flow/relationship-edge";
 import {
   REL_TYPE_VALUES,
   EVENT_IMPACT_VALUES,
-  type Character,
   type EventImpact,
-  type Relationship,
   type RelType,
-  type StoryEvent,
 } from "@behindthestory/db/schema";
+import type {
+  Character,
+  Relationship,
+  StoryEvent,
+} from "@/lib/queries/types";
 import {
   allTransitions,
   causalTrace,
@@ -92,6 +98,10 @@ export function RelationshipDialog({
   const [description, setDescription] = useState("");
   const [significance, setSignificance] = useState("");
   const [busy, setBusy] = useState(false);
+  const createRelationship = useCreateRelationship(novelId);
+  const recordEvent = useCreateStoryEvent(novelId);
+  const updateEntity = useUpdateEntity<Relationship>(novelId);
+  const deleteEntity = useDeleteEntity(novelId);
 
   // --- The event being authored (the opening one when creating) -------------
   const [type, setType] = useState<RelType>("friendship");
@@ -153,7 +163,7 @@ export function RelationshipDialog({
   async function create() {
     setBusy(true);
     try {
-      await api.post(`/api/novels/${novelId}/relationships`, {
+      await createRelationship.mutateAsync({
         sourceCharacterId: target!.sourceCharacterId,
         targetCharacterId: target!.targetCharacterId,
         description,
@@ -180,9 +190,10 @@ export function RelationshipDialog({
     if (!existing) return;
     setBusy(true);
     try {
-      await api.patch(`/api/entities/relationships/${existing.id}`, {
-        description,
-        significance,
+      await updateEntity.mutateAsync({
+        entity: "relationships",
+        id: existing.id,
+        values: { description, significance },
       });
       onChanged();
       toast.success("Notes saved");
@@ -201,7 +212,7 @@ export function RelationshipDialog({
     }
     setBusy(true);
     try {
-      await api.post(`/api/novels/${novelId}/story-events`, {
+      await recordEvent.mutateAsync({
         relationshipId: existing.id,
         type,
         closeness,
@@ -232,7 +243,7 @@ export function RelationshipDialog({
       return;
     }
     try {
-      await api.del(`/api/entities/story-events/${id}`);
+      await deleteEntity.mutateAsync({ entity: "story-events", id });
       onChanged();
     } catch (e) {
       toast.error((e as Error).message);
@@ -242,7 +253,10 @@ export function RelationshipDialog({
   async function removeRelationship() {
     if (!existing) return;
     try {
-      await api.del(`/api/entities/relationships/${existing.id}`);
+      await deleteEntity.mutateAsync({
+        entity: "relationships",
+        id: existing.id,
+      });
       onDeleted(existing.id);
       onOpenChange(false);
     } catch (e) {

@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { Chapter, Character } from "@behindthestory/db/schema";
+import type { Chapter, Character } from "@/lib/queries/types";
 
 export type Slot = {
   number: number;

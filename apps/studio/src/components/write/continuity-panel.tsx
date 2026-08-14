@@ -6,7 +6,7 @@ import { RiLoader4Line, RiShieldCheckLine, RiShieldCrossLine } from "@remixicon/
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
+import { useAiContinuity } from "@/lib/queries/ai";
 import { cn } from "@/lib/utils";
 
 type Issue = {
@@ -52,24 +52,22 @@ export function ContinuityPanel({
   compact = false,
 }: Props) {
   const [issues, setIssues] = useState<Issue[] | null>(null);
-  const [busy, setBusy] = useState(false);
+  const check = useAiContinuity();
+  const busy = check.isPending;
 
-  async function run() {
-    setBusy(true);
-    try {
-      const out = await api.post<{ issues: Issue[] }>("/api/ai/continuity", {
-        novelId,
-        chapterId,
-      });
-      setIssues(out.issues);
-      if (out.issues.length === 0) {
-        toast.success("No continuity conflicts found");
-      }
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+  function run() {
+    check.mutate(
+      { novelId, chapterId },
+      {
+        onSuccess: (out) => {
+          setIssues(out.issues);
+          if (out.issues.length === 0) {
+            toast.success("No continuity conflicts found");
+          }
+        },
+        onError: (error) => toast.error(error.message),
+      },
+    );
   }
 
   return (

@@ -1,38 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
 import { RiDownloadLine, RiEditLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
+import { useNovel } from "@/lib/queries/novels";
+import { useEntityList } from "@/lib/queries/entities";
 import { MarkdownProse } from "./markdown-prose";
-import type { Chapter, Novel } from "@behindthestory/db/schema";
+import type { Chapter, Novel } from "@/lib/queries/types";
 
 export function ReadingView({ novelId }: { novelId: string }) {
-  const [novel, setNovel] = useState<Novel | null>(null);
-  const [chapters, setChapters] = useState<Chapter[] | null>(null);
+  const { data: novel = null } = useNovel(novelId);
+  const { data: allChapters, isError } = useEntityList<Chapter>(
+    novelId,
+    "chapters",
+  );
 
-  useEffect(() => {
-    Promise.all([
-      api.get<Novel>(`/api/novels/${novelId}`),
-      api.get<Chapter[]>(`/api/novels/${novelId}/chapters`),
-    ])
-      .then(([n, chaps]) => {
-        setNovel(n);
-        // Only the active take of each slot is part of the manuscript.
-        setChapters(
-          chaps.filter((c) => c.isActive).sort((a, b) => a.number - b.number),
-        );
-      })
-      .catch((e) => {
-        toast.error((e as Error).message);
-        setChapters([]);
-      });
-  }, [novelId]);
+  // Only the active take of each slot is part of the manuscript.
+  const chapters =
+    allChapters === undefined && !isError
+      ? null
+      : (allChapters ?? [])
+          .filter((c) => c.isActive)
+          .sort((a, b) => a.number - b.number);
 
   const written = useMemo(
     () => (chapters ?? []).filter((ch) => ch.content.trim()),

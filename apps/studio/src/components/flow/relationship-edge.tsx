@@ -8,7 +8,8 @@ import {
   type EdgeProps,
   type Edge,
 } from "@xyflow/react";
-import type { Relationship, RelType } from "@behindthestory/db/schema";
+import type { RelType } from "@behindthestory/db/schema";
+import type { Relationship } from "@/lib/queries/types";
 import type { RelationshipState } from "@behindthestory/core/story-state";
 
 /**

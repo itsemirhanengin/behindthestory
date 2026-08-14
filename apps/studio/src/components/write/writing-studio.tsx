@@ -37,7 +37,21 @@ import {
   SheetDescription,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { api } from "@/lib/api";
+import {
+  fetchEntity,
+  fetchEntityList,
+  useUpdateEntity,
+} from "@/lib/queries/entities";
+import { useAiFeedbackDecision, useAiFeedbackRating } from "@/lib/queries/ai";
+import {
+  useActivateVariant,
+  useSaveRevision,
+} from "@/lib/queries/chapters";
+import {
+  fetchNovel,
+  fetchRelationships,
+  fetchStoryEvents,
+} from "@/lib/queries/story";
 import { cn } from "@/lib/utils";
 import {
   consumeProseStream,
@@ -64,16 +78,8 @@ import {
   type SuggestionMode,
 } from "./prose-editor";
 import { WritingToolsPanel } from "./writing-tools-panel";
-import type {
-  Beat,
-  Chapter,
-  Character,
-  Location,
-  Novel,
-  Relationship,
-  StoryElement,
-  StoryEvent,
-} from "@behindthestory/db/schema";
+import type { Beat } from "@behindthestory/db/schema";
+import type { Chapter, Character, Location, Novel, Relationship, StoryElement, StoryEvent } from "@/lib/queries/types";
 import type { ContextSelection } from "./context-panel";
 
 const INLINE_ACTIONS = [
@@ -165,19 +171,24 @@ export function WritingStudio({
   const savedVersionRef = useRef(0);
   const saveErrorShownRef = useRef(false);
   const { sidebarOpen, toggleSidebar } = useNovelWorkspace();
+  const updateChapter = useUpdateEntity<Chapter>(novelId);
+  const activateVariant = useActivateVariant(novelId);
+  const saveRevision = useSaveRevision(chapterId);
+  const recordDecision = useAiFeedbackDecision();
+  const rateSuggestion = useAiFeedbackRating();
 
   const loadAll = useCallback(async () => {
     setReady(false);
     const [nov, ch, chapters, chars, locs, elems, rels, evts] =
       await Promise.all([
-        api.get<Novel>(`/api/novels/${novelId}`),
-        api.get<Chapter>(`/api/entities/chapters/${chapterId}`),
-        api.get<Chapter[]>(`/api/novels/${novelId}/chapters`),
-        api.get<Character[]>(`/api/novels/${novelId}/characters`),
-        api.get<Location[]>(`/api/novels/${novelId}/locations`),
-        api.get<StoryElement[]>(`/api/novels/${novelId}/story-elements`),
-        api.get<Relationship[]>(`/api/novels/${novelId}/relationships`),
-        api.get<StoryEvent[]>(`/api/novels/${novelId}/story-events`),
+        fetchNovel(novelId),
+        fetchEntity<Chapter>("chapters", chapterId),
+        fetchEntityList<Chapter>(novelId, "chapters"),
+        fetchEntityList<Character>(novelId, "characters"),
+        fetchEntityList<Location>(novelId, "locations"),
+        fetchEntityList<StoryElement>(novelId, "story-elements"),
+        fetchRelationships(novelId),
+        fetchStoryEvents(novelId),
       ]);
     chapters.sort((a, b) => a.number - b.number);
     setNovel(nov);
@@ -222,9 +233,10 @@ export function WritingStudio({
     const version = changeVersionRef.current;
     setSaveState("saving");
     try {
-      await api.patch(`/api/entities/chapters/${chapterId}`, {
-        title: titleRef.current,
-        content: contentRef.current,
+      await updateChapter.mutateAsync({
+        entity: "chapters",
+        id: chapterId,
+        values: { title: titleRef.current, content: contentRef.current },
       });
       savedVersionRef.current = Math.max(savedVersionRef.current, version);
       if (savedVersionRef.current >= changeVersionRef.current) {
@@ -349,13 +361,10 @@ export function WritingStudio({
 
   const snapshot = useCallback(
     (label: string) =>
-      api
-        .post(`/api/chapters/${chapterId}/revisions`, {
-          label,
-          content: contentRef.current,
-        })
+      saveRevision
+        .mutateAsync({ label, content: contentRef.current })
         .catch(() => {}),
-    [chapterId],
+    [saveRevision],
   );
 
   function flushSuggestionText() {
@@ -528,16 +537,17 @@ export function WritingStudio({
         ? async () => {
             if (!chapter) return;
             try {
-              const updated = await api.patch<Chapter>(
-                `/api/entities/chapters/${chapterId}`,
-                {
+              const updated = await updateChapter.mutateAsync({
+                entity: "chapters",
+                id: chapterId,
+                values: {
                   beats: chapter.beats.map((candidate) =>
                     candidate.id === beat.id
                       ? { ...candidate, done: true }
                       : candidate,
                   ),
                 },
-              );
+              });
               setChapter(updated);
             } catch {
               toast.error("The passage was accepted, but the beat was not marked done.");
@@ -608,9 +618,7 @@ export function WritingStudio({
     request: ActiveRequest | null,
   ) {
     try {
-      const result = await api.post<FeedbackDecisionResponse>(
-        "/api/ai/feedback",
-        {
+      const result = (await recordDecision.mutateAsync({
           suggestionId: decidedSuggestion.id,
           novelId,
           chapterId,
@@ -621,8 +629,7 @@ export function WritingStudio({
           suggestionText: decidedSuggestion.text,
           inputTokens: decidedSuggestion.usage?.inputTokens ?? 0,
           outputTokens: decidedSuggestion.usage?.outputTokens ?? 0,
-        },
-      );
+      })) as FeedbackDecisionResponse;
       if (result.shouldPrompt) {
         setFeedbackPrompt({
           id: result.id,
@@ -776,10 +783,11 @@ export function WritingStudio({
             <Select
               value={chapter.status}
               onValueChange={async (value) => {
-                const updated = await api.patch<Chapter>(
-                  `/api/entities/chapters/${chapterId}`,
-                  { status: value },
-                );
+                const updated = await updateChapter.mutateAsync({
+                  entity: "chapters",
+                  id: chapterId,
+                  values: { status: value },
+                });
                 setChapter(updated);
               }}
             >
@@ -870,8 +878,8 @@ export function WritingStudio({
                   <DropdownMenuItem
                     onSelect={async () => {
                       try {
-                        const updated = await api.post<Chapter>(
-                          `/api/chapters/${chapterId}/activate`,
+                        const updated = await activateVariant.mutateAsync(
+                          chapterId,
                         );
                         setChapter(updated);
                         toast.success(`Take ${updated.variantLabel} is now active.`);
@@ -1038,7 +1046,7 @@ export function WritingStudio({
           onSkip={() => setFeedbackPrompt(null)}
           onSubmit={async (rating, comment) => {
             try {
-              await api.patch("/api/ai/feedback", {
+              await rateSuggestion.mutateAsync({
                 id: feedbackPrompt.id,
                 rating,
                 comment,

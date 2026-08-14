@@ -4,13 +4,8 @@ import { RiFileSearchLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import type {
-  Beat,
-  Chapter,
-  Character,
-  Location,
-  StoryElement,
-} from "@behindthestory/db/schema";
+import type { Beat } from "@behindthestory/db/schema";
+import type { Chapter, Character, Location, StoryElement } from "@/lib/queries/types";
 import { ContextPanel, type ContextSelection } from "./context-panel";
 import { ContinuityPanel } from "./continuity-panel";
 import { PlanPanel } from "./plan-panel";

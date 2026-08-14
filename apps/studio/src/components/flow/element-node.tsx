@@ -9,7 +9,7 @@ import {
   RiShuffleLine,
 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
-import type { StoryElement } from "@behindthestory/db/schema";
+import type { StoryElement } from "@/lib/queries/types";
 
 export type ElementNodeType = Node<{ element: StoryElement }, "element">;
 

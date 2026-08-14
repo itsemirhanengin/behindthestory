@@ -22,12 +22,13 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.10.7",
     "ioredis": "^6.0.0",
+    "pg": "^8.23.0",
     "react": "19.2.8",
     "resend": "^6.19.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.5",
+    "@hono/node-server": "^1.19.17",
     "@types/node": "^20",
     "@types/react": "^19",
     "esbuild": "^0.25.12",

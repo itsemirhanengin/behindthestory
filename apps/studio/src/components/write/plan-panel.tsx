@@ -13,9 +13,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { api } from "@/lib/api";
+import { useUpdateEntity } from "@/lib/queries/entities";
+import { useAiOutline } from "@/lib/queries/ai";
 import { cn } from "@/lib/utils";
-import type { Beat, Chapter } from "@behindthestory/db/schema";
+import type { Beat } from "@behindthestory/db/schema";
+import type { Chapter } from "@/lib/queries/types";
 
 type Props = {
   novelId: string;
@@ -51,6 +53,8 @@ export function PlanPanel({
   const [beats, setBeats] = useState<Beat[]>(chapter.beats);
   const [planning, setPlanning] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const updateEntity = useUpdateEntity<Chapter>(novelId);
+  const planOutline = useAiOutline();
 
   useEffect(() => {
     return () => {
@@ -62,10 +66,11 @@ export function PlanPanel({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
-        const updated = await api.patch<Chapter>(
-          `/api/entities/chapters/${chapterId}`,
-          next,
-        );
+        const updated = await updateEntity.mutateAsync({
+          entity: "chapters",
+          id: chapterId,
+          values: next,
+        });
         onChapterUpdate(updated);
       } catch (e) {
         toast.error((e as Error).message);
@@ -86,11 +91,7 @@ export function PlanPanel({
   async function planWithAI() {
     setPlanning(true);
     try {
-      const out = await api.post<{
-        title: string;
-        outline: string;
-        beats: string[];
-      }>("/api/ai/outline", {
+      const out = await planOutline.mutateAsync({
         novelId,
         chapterId,
         instruction: instruction || undefined,
@@ -98,7 +99,7 @@ export function PlanPanel({
         selectedLocationIds: [...selection.locationIds],
         selectedElementIds: [...selection.elementIds],
       });
-      const nextBeats: Beat[] = out.beats.map((text) => ({
+      const nextBeats: Beat[] = out.beats.map((text: string) => ({
         id: crypto.randomUUID(),
         text,
         done: false,
@@ -107,14 +108,15 @@ export function PlanPanel({
       setBeats(nextBeats);
       // Only adopt the suggested title if the chapter is still unnamed.
       const generic = /^chapter \d+$/i.test(chapter.title.trim());
-      const updated = await api.patch<Chapter>(
-        `/api/entities/chapters/${chapterId}`,
-        {
+      const updated = await updateEntity.mutateAsync({
+        entity: "chapters",
+        id: chapterId,
+        values: {
           outline: out.outline,
           beats: nextBeats,
           ...(generic ? { title: out.title } : {}),
         },
-      );
+      });
       onChapterUpdate(updated);
       toast.success("Chapter planned — review the beats before writing");
     } catch (e) {

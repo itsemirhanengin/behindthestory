@@ -18,7 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { api } from "@/lib/api";
+import { useSearch } from "@/lib/queries/story";
 import type { SearchHit } from "@behindthestory/api/type";
 
 const GROUPS: { kind: SearchHit["kind"]; label: string; icon: typeof RiUserLine }[] = [
@@ -37,8 +37,11 @@ export function ManuscriptSearch({ novelId }: { novelId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
-  const [searching, setSearching] = useState(false);
+  // Debounced so a query fires per pause, not per keystroke.
+  const [debounced, setDebounced] = useState("");
+  const { data, isFetching } = useSearch(novelId, open ? debounced : "");
+  const hits: SearchHit[] = data?.hits ?? [];
+  const searching = isFetching;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -52,22 +55,9 @@ export function ManuscriptSearch({ novelId }: { novelId: string }) {
   }, []);
 
   useEffect(() => {
-    if (!open || query.trim().length < 2) {
-      setHits([]);
-      return;
-    }
-    setSearching(true);
-    const timer = setTimeout(() => {
-      api
-        .get<{ hits: SearchHit[] }>(
-          `/api/novels/${novelId}/search?q=${encodeURIComponent(query.trim())}`,
-        )
-        .then((res) => setHits(res.hits))
-        .catch(() => setHits([]))
-        .finally(() => setSearching(false));
-    }, 220);
+    const timer = setTimeout(() => setDebounced(query.trim()), 220);
     return () => clearTimeout(timer);
-  }, [query, open, novelId]);
+  }, [query]);
 
   return (
     <>

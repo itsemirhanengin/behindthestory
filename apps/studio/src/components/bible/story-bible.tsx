@@ -16,18 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { api } from "@/lib/api";
-import type { Novel } from "@behindthestory/db/schema";
+import { useNovel, useUpdateNovel } from "@/lib/queries/novels";
+import { useUsage } from "@/lib/queries/story";
+import { useAiStyle } from "@/lib/queries/ai";
+import type { Novel } from "@/lib/queries/types";
 
-type Usage = {
-  totals: { calls: number; inputTokens: number; outputTokens: number };
-  byRoute: {
-    route: string;
-    calls: number;
-    inputTokens: number;
-    outputTokens: number;
-  }[];
-};
 
 type StyleSuggestion = Pick<
   Novel,
@@ -42,32 +35,25 @@ const compact = (n: number) =>
       : String(n);
 
 export function StoryBible({ novelId }: { novelId: string }) {
-  const [novel, setNovel] = useState<Novel | null>(null);
+  const { data: novel = null } = useNovel(novelId);
+  const { data: usage = null } = useUsage(novelId);
   const [form, setForm] = useState<Partial<Novel>>({});
-  const [usage, setUsage] = useState<Usage | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [suggesting, setSuggesting] = useState(false);
+  const update = useUpdateNovel(novelId);
+  const suggest = useAiStyle();
+  const saving = update.isPending;
+  const suggesting = suggest.isPending;
 
+  // The form is a working copy; it only resets when a different novel loads or
+  // a save comes back, never on an unrelated cache refresh.
   useEffect(() => {
-    api
-      .get<Novel>(`/api/novels/${novelId}`)
-      .then((n) => {
-        setNovel(n);
-        setForm(n);
-      })
-      .catch((e) => toast.error(e.message));
-    api
-      .get<Usage>(`/api/novels/${novelId}/usage`)
-      .then(setUsage)
-      .catch(() => {});
-  }, [novelId]);
+    if (novel) setForm(novel);
+  }, [novel?.id]);
 
   const set = (patch: Partial<Novel>) => setForm((f) => ({ ...f, ...patch }));
 
-  async function save() {
-    setSaving(true);
-    try {
-      const updated = await api.patch<Novel>(`/api/novels/${novelId}`, {
+  function save() {
+    update.mutate(
+      {
         title: form.title,
         premise: form.premise,
         genre: form.genre,
@@ -76,28 +62,28 @@ export function StoryBible({ novelId }: { novelId: string }) {
         tense: form.tense,
         targetChapterWords: form.targetChapterWords,
         styleNotes: form.styleNotes,
-      });
-      setNovel(updated);
-      setForm(updated);
-      toast.success("Story bible saved");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+      },
+      {
+        onSuccess: (updated) => {
+          setForm(updated);
+          toast.success("Story bible saved");
+        },
+        onError: (error) => toast.error(error.message),
+      },
+    );
   }
 
-  async function suggestStyle() {
-    setSuggesting(true);
-    try {
-      const out = await api.post<StyleSuggestion>("/api/ai/style", { novelId });
-      set(out);
-      toast.success("Style proposed — review it, then save");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSuggesting(false);
-    }
+  function suggestStyle() {
+    suggest.mutate(
+      { novelId },
+      {
+        onSuccess: (out) => {
+          set(out);
+          toast.success("Style proposed — review it, then save");
+        },
+        onError: (error) => toast.error(error.message),
+      },
+    );
   }
 
   if (!novel) {

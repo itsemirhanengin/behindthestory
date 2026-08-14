@@ -15,17 +15,12 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { elementStyles } from "@/components/flow/element-node";
 import { relationshipColors } from "@/components/flow/relationship-edge";
-import { api } from "@/lib/api";
+import { useAiAnalyze } from "@/lib/queries/ai";
+import { useMergeAnalysis } from "@/lib/queries/story";
+import { useIndexChapter } from "@/lib/queries/chapters";
 import { cn } from "@/lib/utils";
-import type {
-  CharStatus,
-  Character,
-  EventImpact,
-  Relationship,
-  RelType,
-  StoryElement,
-  StoryEvent,
-} from "@behindthestory/db/schema";
+import type { CharStatus, EventImpact, RelType } from "@behindthestory/db/schema";
+import type { Character, Relationship, StoryElement, StoryEvent } from "@/lib/queries/types";
 import { eventsByRelationship, relationshipStateAsOf } from "@behindthestory/core/story-state";
 
 type Analysis = {
@@ -142,6 +137,9 @@ export function AnalyzeDialog({
   onMerged,
 }: Props) {
   const [busy, setBusy] = useState(false);
+  const analyze = useAiAnalyze();
+  const merge = useMergeAnalysis(novelId);
+  const indexChapter = useIndexChapter(chapterId);
   const [applying, setApplying] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [rejected, setRejected] = useState<Set<string>>(new Set());
@@ -177,11 +175,8 @@ export function AnalyzeDialog({
     setBusy(true);
     setRejected(new Set());
     try {
-      const out = await api.post<Analysis>("/api/ai/analyze", {
-        novelId,
-        chapterId,
-      });
-      setAnalysis(out);
+      const out = await analyze.mutateAsync({ novelId, chapterId });
+      setAnalysis(out as Analysis);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -193,9 +188,7 @@ export function AnalyzeDialog({
     if (!analysis) return;
     setApplying(true);
     try {
-      const result = await api.post<{ applied: string[]; skipped: string[] }>(
-        `/api/novels/${novelId}/merge`,
-        {
+      const result = await merge.mutateAsync({
           chapterId,
           chapterSummary: isOn("summary") ? analysis.chapterSummary : undefined,
           newElements: analysis.newElements.filter((_, i) => isOn(`el-${i}`)),
@@ -224,7 +217,7 @@ export function AnalyzeDialog({
       );
       // An analyzed chapter is a settled chapter, so this is the right moment
       // to make its prose retrievable for later chapters.
-      api.post(`/api/chapters/${chapterId}/index`).catch(() => {});
+      indexChapter.mutateAsync().catch(() => {});
       setAnalysis(null);
       onOpenChange(false);
       onMerged();

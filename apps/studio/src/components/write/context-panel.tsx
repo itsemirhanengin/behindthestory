@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { elementStyles } from "@/components/flow/element-node";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import type { Character, Location, StoryElement } from "@behindthestory/db/schema";
+import type { Character, Location, StoryElement } from "@/lib/queries/types";
 
 export type ContextSelection = {
   characterIds: Set<string>;

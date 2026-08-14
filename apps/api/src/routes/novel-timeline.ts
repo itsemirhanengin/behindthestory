@@ -11,7 +11,6 @@ import {
   getDb,
   relationships,
   storyEvents,
-  type StoryEvent,
 } from "@behindthestory/db";
 import {
   loadStoryEvents,
@@ -19,6 +18,7 @@ import {
 } from "@behindthestory/core/story-events";
 import {
   LATEST,
+  type StoryEvent,
   allTransitions,
   causalTrace,
   describeTransition,
@@ -70,13 +70,22 @@ export const novelTimelineRoutes = new Hono<AuthEnv>()
    * Both are served hydrated with names, because an id list is useless to the
    * author who is 500 chapters away from the event.
    */
-  .get("/:novelId/timeline", async (c) => {
+  .get(
+    "/:novelId/timeline",
+    zValidator(
+      "query",
+      z.object({
+        chapter: z.string().optional(),
+        relationshipId: z.string().optional(),
+        asOf: z.string().optional(),
+      }),
+    ),
+    async (c) => {
     const novelId = c.req.param("novelId");
     await assertNovel(c.get("user").id, novelId);
 
-    const chapterParam = c.req.query("chapter");
-    const relationshipId = c.req.query("relationshipId");
-    const asOf = Number(c.req.query("asOf") ?? LATEST);
+    const { chapter: chapterParam, relationshipId, asOf: asOfParam } = c.req.valid("query");
+    const asOf = Number(asOfParam ?? LATEST);
 
     const db = getDb();
     const [cast, rels, events] = await Promise.all([
@@ -154,7 +163,8 @@ export const novelTimelineRoutes = new Hono<AuthEnv>()
 
     // Whole novel, chronological — the timeline view.
     return c.json({ events: sortEvents(events).map(describe) });
-  })
+    },
+  )
   .get("/:novelId/story-events", async (c) => {
     const novelId = c.req.param("novelId");
     await assertNovel(c.get("user").id, novelId);

@@ -16,9 +16,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
+import { useDeleteEntity, useUpdateEntity } from "@/lib/queries/entities";
+import { useAiLocation } from "@/lib/queries/ai";
 import { cn } from "@/lib/utils";
-import type { Character, Location } from "@behindthestory/db/schema";
+import type { Character, Location } from "@/lib/queries/types";
 
 type Props = {
   novelId: string;
@@ -42,6 +43,9 @@ export function LocationSheet({
   const [form, setForm] = useState<Partial<Location>>({});
   const [aiBusy, setAiBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const updateEntity = useUpdateEntity<Location>(novelId);
+  const deleteEntity = useDeleteEntity(novelId);
+  const suggest = useAiLocation();
 
   useEffect(() => {
     if (location) setForm(location);
@@ -65,16 +69,17 @@ export function LocationSheet({
     if (!location) return;
     setSaving(true);
     try {
-      const updated = await api.patch<Location>(
-        `/api/entities/locations/${location.id}`,
-        {
+      const updated = await updateEntity.mutateAsync({
+        entity: "locations",
+        id: location.id,
+        values: {
           name: form.name,
           description: form.description,
           atmosphere: form.atmosphere,
           significance: form.significance,
           characterIds: form.characterIds ?? [],
         },
-      );
+      });
       onSaved(updated);
       toast.success("Location saved");
     } catch (e) {
@@ -88,12 +93,7 @@ export function LocationSheet({
     if (!location) return;
     setAiBusy(true);
     try {
-      const out = await api.post<{
-        name: string;
-        description: string;
-        atmosphere: string;
-        significance: string;
-      }>("/api/ai/location", { novelId, locationId: location.id });
+      const out = await suggest.mutateAsync({ novelId, locationId: location.id });
       set({
         description: out.description,
         atmosphere: out.atmosphere,
@@ -110,7 +110,7 @@ export function LocationSheet({
   async function remove() {
     if (!location) return;
     try {
-      await api.del(`/api/entities/locations/${location.id}`);
+      await deleteEntity.mutateAsync({ entity: "locations", id: location.id });
       onDeleted(location.id);
       onOpenChange(false);
     } catch (e) {

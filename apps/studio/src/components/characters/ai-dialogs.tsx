@@ -20,9 +20,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { api } from "@/lib/api";
+import { useAiCharacter, useAiRelationships } from "@/lib/queries/ai";
+import { useCreateEntity } from "@/lib/queries/entities";
+import { useCreateRelationship } from "@/lib/queries/story";
 import { relationshipColors } from "@/components/flow/relationship-edge";
-import type { Character, RelType } from "@behindthestory/db/schema";
+import type { RelType } from "@behindthestory/db/schema";
+import type { Character } from "@/lib/queries/types";
 
 type GeneratedCharacter = {
   name: string;
@@ -47,16 +50,15 @@ export function AiCharacterDialog({
 }) {
   const [hint, setHint] = useState("");
   const [busy, setBusy] = useState(false);
+  const invent = useAiCharacter();
+  const createCharacter = useCreateEntity<Character>(novelId, "characters");
   const [draft, setDraft] = useState<GeneratedCharacter | null>(null);
 
   async function generate() {
     setBusy(true);
     try {
-      const out = await api.post<GeneratedCharacter>("/api/ai/character", {
-        novelId,
-        hint: hint || undefined,
-      });
-      setDraft(out);
+      const out = await invent.mutateAsync({ novelId, hint: hint || undefined });
+      setDraft(out as GeneratedCharacter);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -68,15 +70,12 @@ export function AiCharacterDialog({
     if (!draft) return;
     setBusy(true);
     try {
-      const created = await api.post<Character>(
-        `/api/novels/${novelId}/characters`,
-        {
-          ...draft,
-          origin: "ai",
-          posX: 100 + Math.random() * 300,
-          posY: 100 + Math.random() * 300,
-        },
-      );
+      const created = await createCharacter.mutateAsync({
+        ...draft,
+        origin: "ai",
+        posX: 100 + Math.random() * 300,
+        posY: 100 + Math.random() * 300,
+      });
       onAccepted(created);
       setDraft(null);
       setHint("");
@@ -196,6 +195,8 @@ export function InferRelationshipsDialog({
 }) {
   const [busy, setBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<RelSuggestion[] | null>(null);
+  const infer = useAiRelationships();
+  const createRelationship = useCreateRelationship(novelId);
 
   const nameOf = (id: string) =>
     characters.find((c) => c.id === id)?.name ?? "?";
@@ -203,11 +204,8 @@ export function InferRelationshipsDialog({
   async function run() {
     setBusy(true);
     try {
-      const out = await api.post<{ suggestions: RelSuggestion[] }>(
-        "/api/ai/relationships",
-        { novelId },
-      );
-      setSuggestions(out.suggestions);
+      const out = await infer.mutateAsync({ novelId });
+      setSuggestions(out.suggestions as RelSuggestion[]);
       if (out.suggestions.length === 0)
         toast.info("No new relationships implied by the story yet.");
     } catch (e) {
@@ -219,7 +217,7 @@ export function InferRelationshipsDialog({
 
   async function accept(s: RelSuggestion) {
     try {
-      await api.post(`/api/novels/${novelId}/relationships`, {
+      await createRelationship.mutateAsync({
         sourceCharacterId: s.sourceCharacterId,
         targetCharacterId: s.targetCharacterId,
         type: s.type,

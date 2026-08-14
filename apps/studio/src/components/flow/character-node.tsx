@@ -5,7 +5,7 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { RiSparkling2Line } from "@remixicon/react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { Character } from "@behindthestory/db/schema";
+import type { Character } from "@/lib/queries/types";
 import { formatChapterRef, type CharacterState } from "@behindthestory/core/story-state";
 
 /**

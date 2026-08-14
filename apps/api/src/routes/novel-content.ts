@@ -241,7 +241,7 @@ export const novelContentRoutes = new Hono<AuthEnv>()
     const rows = await getDb().select().from(table).where(eq(table.novelId, novelId));
     return c.json(rows);
   })
-  .post("/:novelId/:entity", async (c) => {
+  .post("/:novelId/:entity", zValidator("json", z.record(z.string(), z.unknown())), async (c) => {
     const novelId = c.req.param("novelId");
     const entity = c.req.param("entity");
     await assertNovel(c.get("user").id, novelId);
@@ -250,7 +250,7 @@ export const novelContentRoutes = new Hono<AuthEnv>()
     }
 
     const table = novelEntityTables[entity];
-    const body = (await c.req.json()) as Record<string, unknown>;
+    const body = c.req.valid("json");
     // The novel comes from the authorised path parameter, never from the body.
     const values: Record<string, unknown> = { ...body, novelId };
     delete values.id;

@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { RiAddLine, RiAlertLine, RiRouteLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { api } from "@/lib/api";
+import { useDeleteEntity, useEntityList, useUpdateEntity } from "@/lib/queries/entities";
+import { useAddChapter } from "@/lib/queries/story";
+import { useActivateVariant, useCreateVariant } from "@/lib/queries/chapters";
 import { cn } from "@/lib/utils";
 import { ChapterCard, type Slot } from "./chapter-card";
 import {
@@ -15,7 +17,7 @@ import {
   type ThreadFilter,
   type ThreadSpan,
 } from "./thread-board";
-import type { Chapter, Character, StoryElement } from "@behindthestory/db/schema";
+import type { Chapter, Character, StoryElement } from "@/lib/queries/types";
 
 function buildSlots(chapters: Chapter[]): Slot[] {
   const byNumber = new Map<number, Chapter[]>();
@@ -35,28 +37,31 @@ function buildSlots(chapters: Chapter[]): Slot[] {
 
 export function StoryMap({ novelId }: { novelId: string }) {
   const router = useRouter();
-  const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [elements, setElements] = useState<StoryElement[]>([]);
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
 
+  const chaptersQuery = useEntityList<Chapter>(novelId, "chapters");
+  const elementsQuery = useEntityList<StoryElement>(novelId, "story-elements");
+  const charactersQuery = useEntityList<Character>(novelId, "characters");
+  const chapters = chaptersQuery.data ?? [];
+  const elements = elementsQuery.data ?? [];
+  const characters = charactersQuery.data ?? [];
+  const loading =
+    chaptersQuery.isPending || elementsQuery.isPending || charactersQuery.isPending;
+
+  const addChapterMutation = useAddChapter(novelId);
+  const activateVariant = useActivateVariant(novelId);
+  const createVariant = useCreateVariant(novelId);
+  const updateEntity = useUpdateEntity<Chapter>(novelId);
+  const deleteEntity = useDeleteEntity(novelId);
+
   const load = useCallback(async () => {
-    try {
-      const [chaps, elems, chars] = await Promise.all([
-        api.get<Chapter[]>(`/api/novels/${novelId}/chapters`),
-        api.get<StoryElement[]>(`/api/novels/${novelId}/story-elements`),
-        api.get<Character[]>(`/api/novels/${novelId}/characters`),
-      ]);
-      setChapters(chaps);
-      setElements(elems);
-      setCharacters(chars);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
+    await Promise.all([
+      chaptersQuery.refetch(),
+      elementsQuery.refetch(),
+      charactersQuery.refetch(),
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novelId]);
 
   useEffect(() => {
@@ -98,11 +103,9 @@ export function StoryMap({ novelId }: { novelId: string }) {
 
   async function addChapter(afterNumber?: number) {
     try {
-      const created = await api.post<Chapter>(
-        `/api/novels/${novelId}/add-chapter`,
+      const created = await addChapterMutation.mutateAsync(
         afterNumber ? { afterNumber } : {},
       );
-      await load();
       router.push(`/novels/${novelId}/write/${created.id}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -240,12 +243,12 @@ export function StoryMap({ novelId }: { novelId: string }) {
                     highlighted={threadSlots?.has(slot.number) ?? false}
                     dimmed={!!threadSlots && !threadSlots.has(slot.number)}
                     onActivateVariant={(v) =>
-                      mutate(() => api.post(`/api/chapters/${v.id}/activate`))
+                      mutate(() => activateVariant.mutateAsync(v.id))
                     }
                     onAddVariant={() =>
                       mutate(async () => {
-                        const created = await api.post<Chapter>(
-                          `/api/chapters/${slot.active.id}/variants`,
+                        const created = await createVariant.mutateAsync(
+                          slot.active.id,
                         );
                         toast.success(
                           `Take ${created.variantLabel} created — switch to it when you want it to count`,
@@ -254,16 +257,23 @@ export function StoryMap({ novelId }: { novelId: string }) {
                     }
                     onToggleContinues={() =>
                       mutate(() =>
-                        api.patch(`/api/entities/chapters/${slot.active.id}`, {
-                          continuesFromPrevious:
-                            !slot.active.continuesFromPrevious,
+                        updateEntity.mutateAsync({
+                          entity: "chapters",
+                          id: slot.active.id,
+                          values: {
+                            continuesFromPrevious:
+                              !slot.active.continuesFromPrevious,
+                          },
                         }),
                       )
                     }
                     onInsertAfter={() => addChapter(slot.number)}
                     onDelete={() =>
                       mutate(() =>
-                        api.del(`/api/entities/chapters/${slot.active.id}`),
+                        deleteEntity.mutateAsync({
+                          entity: "chapters",
+                          id: slot.active.id,
+                        }),
                       )
                     }
                   />

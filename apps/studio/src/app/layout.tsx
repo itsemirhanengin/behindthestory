@@ -3,6 +3,7 @@ import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Providers } from "./providers";
 import "./globals.css";
 
 // Siblings from one super-family: the serif carries headings and manuscript
@@ -43,7 +44,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           enableSystem={false}
           disableTransitionOnChange
         >
-          <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
+          <Providers>
+            <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
+          </Providers>
           <Toaster position="bottom-right" />
         </ThemeProvider>
       </body>

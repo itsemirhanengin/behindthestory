@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { RiAddLine, RiBookOpenLine, RiDeleteBinLine } from "@remixicon/react";
@@ -15,29 +14,16 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AccountMenu } from "@/components/account-menu";
-import { api } from "@/lib/api";
-import type { Novel } from "@behindthestory/db/schema";
+import { useDeleteNovel, useNovels } from "@/lib/queries/novels";
 
 export default function HomePage() {
-  const [novels, setNovels] = useState<Novel[] | null>(null);
+  const { data: novels, error } = useNovels();
+  const remove = useDeleteNovel();
 
-  useEffect(() => {
-    api
-      .get<Novel[]>("/api/novels")
-      .then(setNovels)
-      .catch((e) => {
-        toast.error(e.message);
-        setNovels([]);
-      });
-  }, []);
-
-  async function deleteNovel(id: string) {
-    try {
-      await api.del(`/api/novels/${id}`);
-      setNovels((n) => (n ?? []).filter((x) => x.id !== id));
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
+  function deleteNovel(id: string) {
+    remove.mutate(id, {
+      onError: (cause) => toast.error(cause.message),
+    });
   }
 
   return (
@@ -62,7 +48,13 @@ export default function HomePage() {
         </div>
       </div>
 
-      {novels === null ? (
+      {error ? (
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center text-muted-foreground">
+            {error.message}
+          </CardContent>
+        </Card>
+      ) : !novels ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <Skeleton className="h-36" />
           <Skeleton className="h-36" />

@@ -23,7 +23,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
+import {
+  useAiOnboardingReading,
+  useAiOnboardingStyle,
+} from "@/lib/queries/ai";
+import { useCreateNovel } from "@/lib/queries/novels";
 import {
   MIN_DESCRIPTION_WORDS,
   countWords,
@@ -37,7 +41,7 @@ import {
   type WizardTurn,
   type WizardUsage,
 } from "@behindthestory/core/onboarding";
-import type { Novel } from "@behindthestory/db/schema";
+import type { Novel } from "@/lib/queries/types";
 import { PremiseStep } from "./premise-step";
 import { AlignmentStep } from "./alignment-step";
 import { StyleStep } from "./style-step";
@@ -79,6 +83,9 @@ const LAST_STEP = STEPS.length - 1;
 export function NewNovelWizard() {
   const router = useRouter();
   const scrollRef = useRef<HTMLElement>(null);
+  const readNovel = useAiOnboardingReading();
+  const proposeStyle = useAiOnboardingStyle();
+  const createNovel = useCreateNovel();
 
   const [step, setStep] = useState(0);
   const [maxStep, setMaxStep] = useState(0);
@@ -121,10 +128,7 @@ export function NewNovelWizard() {
           corrections,
           previous: reading,
         };
-        const res = await api.post<ReadingResponse>(
-          "/api/ai/onboarding/reading",
-          body,
-        );
+        const res = (await readNovel.mutateAsync(body)) as ReadingResponse;
         setReading(res.reading);
         setReadingRevision((r) => r + 1);
         setUsage((u) => [...u, res.usage]);
@@ -169,10 +173,7 @@ export function NewNovelWizard() {
     const derivedFrom = readingRevision;
     try {
       const body: StyleRequest = { title, reading };
-      const res = await api.post<StyleResponse>(
-        "/api/ai/onboarding/style",
-        body,
-      );
+      const res = (await proposeStyle.mutateAsync(body)) as StyleResponse;
       setStyleProposal(res.style);
       setStyle({
         genre: res.style.genre,
@@ -238,7 +239,7 @@ export function NewNovelWizard() {
     if (!reading || !style || creating) return;
     setCreating(true);
     try {
-      const novel = await api.post<Novel>("/api/novels", {
+      const novel = await createNovel.mutateAsync({
         title: title.trim(),
         premise: reading.premise,
         ...style,

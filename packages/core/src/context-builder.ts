@@ -12,7 +12,6 @@ import {
   type Character,
   type CharacterFact,
   type Relationship,
-  type StoryEvent,
   type Location,
   type Chapter,
   type StoryElement,
@@ -21,6 +20,7 @@ import {
 import { compileStyleDirective } from "@behindthestory/ai";
 import {
   LATEST,
+  type StoryEvent,
   causalTrace,
   characterStateAsOf,
   eventsByCharacter,

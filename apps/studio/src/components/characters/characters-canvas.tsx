@@ -17,7 +17,8 @@ import "@xyflow/react/dist/style.css";
 import { toast } from "sonner";
 import { RiAddLine, RiMindMap, RiSparkling2Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { useCreateEntity, useEntityList, useUpdateEntity } from "@/lib/queries/entities";
+import { useRelationships, useStoryEvents } from "@/lib/queries/story";
 import {
   CharacterNode,
   type CharacterNodeType,
@@ -40,12 +41,7 @@ import {
   eventsByRelationship,
   relationshipStateAsOf,
 } from "@behindthestory/core/story-state";
-import type {
-  Chapter,
-  Character,
-  Relationship,
-  StoryEvent,
-} from "@behindthestory/db/schema";
+import type { Chapter, Character, Relationship, StoryEvent } from "@/lib/queries/types";
 
 const nodeTypes = { character: CharacterNode };
 const edgeTypes = { relationship: RelationshipEdge };
@@ -69,21 +65,29 @@ export function CharactersCanvas({ novelId }: { novelId: string }) {
   /** The chapter whose state is on screen. Null until the spine is known. */
   const [asOf, setAsOf] = useState<number | null>(null);
 
+  const charactersQuery = useEntityList<Character>(novelId, "characters");
+  const chaptersQuery = useEntityList<Chapter>(novelId, "chapters");
+  const relationshipsQuery = useRelationships(novelId);
+  const eventsQuery = useStoryEvents(novelId);
+  const createCharacter = useCreateEntity<Character>(novelId, "characters");
+  const updateEntity = useUpdateEntity<Character>(novelId);
+
+  // The canvas owns node positions once loaded, so the queries seed local state
+  // rather than being read directly — a rebuild mid-drag would snap cards back.
   useEffect(() => {
-    Promise.all([
-      api.get<Character[]>(`/api/novels/${novelId}/characters`),
-      api.get<Relationship[]>(`/api/novels/${novelId}/relationships`),
-      api.get<StoryEvent[]>(`/api/novels/${novelId}/story-events`),
-      api.get<Chapter[]>(`/api/novels/${novelId}/chapters`),
-    ])
-      .then(([chars, rels, evts, chaps]) => {
-        setCharacters(chars);
-        setRelationships(rels);
-        setEvents(evts);
-        setSpine(chaps.filter((ch) => ch.isActive));
-      })
-      .catch((e) => toast.error(e.message));
-  }, [novelId]);
+    if (charactersQuery.data) setCharacters(charactersQuery.data);
+  }, [charactersQuery.data]);
+  useEffect(() => {
+    if (relationshipsQuery.data) setRelationships(relationshipsQuery.data);
+  }, [relationshipsQuery.data]);
+  useEffect(() => {
+    if (eventsQuery.data) setEvents(eventsQuery.data);
+  }, [eventsQuery.data]);
+  useEffect(() => {
+    if (chaptersQuery.data) {
+      setSpine(chaptersQuery.data.filter((ch) => ch.isActive));
+    }
+  }, [chaptersQuery.data]);
 
   const lastChapter = useMemo(
     () => spine.reduce((max, ch) => Math.max(max, ch.number), 1),
@@ -104,16 +108,9 @@ export function CharactersCanvas({ novelId }: { novelId: string }) {
   );
 
   const reload = useCallback(() => {
-    Promise.all([
-      api.get<Relationship[]>(`/api/novels/${novelId}/relationships`),
-      api.get<StoryEvent[]>(`/api/novels/${novelId}/story-events`),
-    ])
-      .then(([rels, evts]) => {
-        setRelationships(rels);
-        setEvents(evts);
-      })
-      .catch((e) => toast.error(e.message));
-  }, [novelId]);
+    void relationshipsQuery.refetch();
+    void eventsQuery.refetch();
+  }, [relationshipsQuery, eventsQuery]);
 
   // --- Derivation: nodes keep their positions, state is patched in ----------
   // Positions live on the node objects because dragging mutates them, so this
@@ -202,24 +199,24 @@ export function CharactersCanvas({ novelId }: { novelId: string }) {
           : c,
       ),
     );
-    api
-      .patch(`/api/entities/characters/${node.id}`, {
-        posX: node.position.x,
-        posY: node.position.y,
+    // Fire and forget: a dropped position that fails to save is not worth
+    // interrupting the author over, and the next drag will try again.
+    updateEntity
+      .mutateAsync({
+        entity: "characters",
+        id: node.id,
+        values: { posX: node.position.x, posY: node.position.y },
       })
       .catch(() => {});
-  }, []);
+  }, [updateEntity]);
 
   async function addCharacter() {
     try {
-      const created = await api.post<Character>(
-        `/api/novels/${novelId}/characters`,
-        {
-          name: `Character ${characters.length + 1}`,
-          posX: 120 + Math.random() * 400,
-          posY: 120 + Math.random() * 300,
-        },
-      );
+      const created = await createCharacter.mutateAsync({
+        name: `Character ${characters.length + 1}`,
+        posX: 120 + Math.random() * 400,
+        posY: 120 + Math.random() * 300,
+      });
       upsertCharacter(created);
       setSelected(created);
       setSheetOpen(true);

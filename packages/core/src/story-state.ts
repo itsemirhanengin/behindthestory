@@ -11,8 +11,19 @@ import type {
   EventImpact,
   Relationship,
   RelType,
-  StoryEvent,
+  StoryEvent as DbStoryEvent,
 } from "@behindthestory/db/schema";
+
+/**
+ * Timestamps arrive as `Date` on the server and as ISO strings in the browser,
+ * because JSON has no date type. None of the reasoning below reads them — order
+ * comes from `chapterNumber` and `createdAt` only as a tiebreak — so the
+ * signatures accept either rather than forcing one side to convert a field it
+ * never looks at.
+ */
+export type StoryEvent = Omit<DbStoryEvent, "createdAt"> & {
+  createdAt: Date | string;
+};
 
 /** Read the newest state, ignoring where the author currently is in the novel. */
 export const LATEST = Number.POSITIVE_INFINITY;
@@ -48,7 +59,7 @@ export type CharacterState = {
 export function compareEvents(a: StoryEvent, b: StoryEvent): number {
   return (
     a.chapterNumber - b.chapterNumber ||
-    a.createdAt.valueOf() - b.createdAt.valueOf() ||
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
     a.id.localeCompare(b.id)
   );
 }
