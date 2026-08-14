@@ -20,9 +20,10 @@ const nextConfig: NextConfig = {
    * there is no CORS config and no `credentials: "include"` anywhere in the
    * client.
    *
-   * Only migrated paths are listed; `/api/ai/*` is still served by this app's
-   * own route handlers and falls through untouched, which is what makes the
-   * port incremental rather than a cutover.
+   * Every API path now lives in the service; this app serves pages only. The
+   * list stays explicit rather than becoming `/api/:path*` so that adding a
+   * route handler back here — for something genuinely page-adjacent — does not
+   * silently get swallowed by the proxy.
    *
    * Mobile skips this entirely and calls the API directly with a bearer token.
    */
@@ -32,6 +33,7 @@ const nextConfig: NextConfig = {
       { source: "/api/novels/:path*", destination: `${API_URL}/api/novels/:path*` },
       { source: "/api/chapters/:path*", destination: `${API_URL}/api/chapters/:path*` },
       { source: "/api/entities/:path*", destination: `${API_URL}/api/entities/:path*` },
+      { source: "/api/ai/:path*", destination: `${API_URL}/api/ai/:path*` },
     ];
   },
 };

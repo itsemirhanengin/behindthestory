@@ -2,6 +2,10 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 
+import { aiCraftRoutes } from "#routes/ai-craft";
+import { aiOnboardingRoutes } from "#routes/ai-onboarding";
+import { aiReviewRoutes } from "#routes/ai-review";
+import { aiWritingRoutes } from "#routes/ai-writing";
 import { authRoutes } from "#routes/auth";
 import { chapterRoutes } from "#routes/chapters";
 import { entityRoutes } from "#routes/entities";
@@ -27,7 +31,11 @@ const routes = new Hono()
   .route("/api/novels", novelMergeRoutes)
   .route("/api/novels", novelContentRoutes)
   .route("/api/chapters", chapterRoutes)
-  .route("/api/entities", entityRoutes);
+  .route("/api/entities", entityRoutes)
+  .route("/api/ai", aiCraftRoutes)
+  .route("/api/ai", aiReviewRoutes)
+  .route("/api/ai", aiWritingRoutes)
+  .route("/api/ai/onboarding", aiOnboardingRoutes);
 
 export const app = new Hono()
   .use("*", logger())
