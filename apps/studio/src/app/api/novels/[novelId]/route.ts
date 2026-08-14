@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, novels, POV_VALUES, TENSE_VALUES } from "@/db";
+import { currentUser, unauthorized } from "@/lib/auth/request";
+import { notFound, ownsNovel } from "@/lib/auth/ownership";
 
 type Params = { params: Promise<{ novelId: string }> };
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   const { novelId } = await params;
+  const user = await currentUser(req);
+  if (!user) return unauthorized();
+  if (!(await ownsNovel(user.id, novelId))) return notFound();
   const db = getDb();
   const [row] = await db.select().from(novels).where(eq(novels.id, novelId));
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -26,6 +31,9 @@ const patchSchema = z.object({
 
 export async function PATCH(req: Request, { params }: Params) {
   const { novelId } = await params;
+  const user = await currentUser(req);
+  if (!user) return unauthorized();
+  if (!(await ownsNovel(user.id, novelId))) return notFound();
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -43,8 +51,11 @@ export async function PATCH(req: Request, { params }: Params) {
   return NextResponse.json(row);
 }
 
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
   const { novelId } = await params;
+  const user = await currentUser(req);
+  if (!user) return unauthorized();
+  if (!(await ownsNovel(user.id, novelId))) return notFound();
   const db = getDb();
   await db.delete(novels).where(eq(novels.id, novelId));
   return NextResponse.json({ ok: true });

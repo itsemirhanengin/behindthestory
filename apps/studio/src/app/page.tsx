@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AccountMenu } from "@/components/account-menu";
 import { api } from "@/lib/api";
 import type { Novel } from "@/db/schema";
 
@@ -51,6 +52,7 @@ export default function HomePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <AccountMenu />
           <ThemeToggle />
           <Button asChild>
             <Link href="/novels/new">

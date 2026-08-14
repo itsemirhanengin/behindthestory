@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, novels, POV_VALUES, TENSE_VALUES } from "@/db";
 import { logGeneration } from "@/lib/ai";
+import { currentUser, unauthorized } from "@/lib/auth/request";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const user = await currentUser(req);
+  if (!user) return unauthorized();
+
   const db = getDb();
-  const rows = await db.select().from(novels).orderBy(desc(novels.createdAt));
+  const rows = await db
+    .select()
+    .from(novels)
+    .where(eq(novels.ownerId, user.id))
+    .orderBy(desc(novels.createdAt));
   return NextResponse.json(rows);
 }
 
@@ -45,6 +53,9 @@ const createSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const user = await currentUser(req);
+  if (!user) return unauthorized();
+
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -55,7 +66,12 @@ export async function POST(req: Request) {
   const { aiUsage, ...values } = parsed.data;
 
   const db = getDb();
-  const [row] = await db.insert(novels).values(values).returning();
+  // Ownership is set here and never accepted from the client — it is the only
+  // thing standing between two accounts' manuscripts.
+  const [row] = await db
+    .insert(novels)
+    .values({ ...values, ownerId: user.id })
+    .returning();
 
   for (const entry of aiUsage) {
     await logGeneration({ novelId: row.id, ...entry });

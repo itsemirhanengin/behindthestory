@@ -32,6 +32,8 @@ export const REL_TYPE_VALUES = [
 
 export const CHAR_STATUS_VALUES = ["alive", "dead", "unknown"] as const;
 
+export const SESSION_CLIENT_VALUES = ["web", "mobile"] as const;
+
 /**
  * How much an event mattered. This is the ranking signal that makes a
  * 600-chapter relationship readable: `pivotal` events are the ones the "why"
@@ -39,8 +41,68 @@ export const CHAR_STATUS_VALUES = ["alive", "dead", "unknown"] as const;
  */
 export const EVENT_IMPACT_VALUES = ["minor", "major", "pivotal"] as const;
 
+/**
+ * Accounts are passwordless: an address that can receive a code is the whole
+ * credential, so there is nothing here to hash, rotate or reset.
+ */
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Always stored lower-cased; compare against `normalizeEmail()` output. */
+    email: text("email").notNull(),
+    displayName: text("display_name").notNull().default(""),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at"),
+  },
+  (t) => [uniqueIndex("users_email_idx").on(t.email)],
+);
+
+/**
+ * One row per signed-in device. Sessions live in Postgres rather than Redis so
+ * they survive a cache flush, can be listed back to the writer as "my devices",
+ * and can be revoked one at a time.
+ */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** SHA-256 of the token. The raw token is shown once and never stored. */
+    tokenHash: text("token_hash").notNull(),
+    /** Which client the session was minted for — web uses a cookie, mobile a
+     *  bearer token, and knowing which lets us present the device list. */
+    client: text("client", { enum: SESSION_CLIENT_VALUES })
+      .notNull()
+      .default("web"),
+    userAgent: text("user_agent").notNull().default(""),
+    ip: text("ip").notNull().default(""),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at").notNull().defaultNow(),
+    expiresAt: timestamp("expires_at").notNull(),
+    revokedAt: timestamp("revoked_at"),
+  },
+  (t) => [
+    uniqueIndex("sessions_token_idx").on(t.tokenHash),
+    index("sessions_user_idx").on(t.userId),
+  ],
+);
+
 export const novels = pgTable("novels", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /**
+   * The single ownership edge for the whole graph. Every other table reaches a
+   * novel through `novel_id`, so authorisation is one check here rather than a
+   * column on all thirteen tables.
+   *
+   * Nullable only to carry pre-auth rows across; a null owner is unreachable
+   * for every caller until `db:claim` assigns it.
+   */
+  ownerId: uuid("owner_id").references(() => users.id, {
+    onDelete: "cascade",
+  }),
   title: text("title").notNull(),
   premise: text("premise").notNull().default(""),
 
