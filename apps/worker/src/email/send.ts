@@ -1,7 +1,6 @@
 import { Resend } from "resend";
 
-import { SignInCodeEmail } from "#lib/email/templates/sign-in-code";
-import { OTP_TTL_SECONDS } from "#lib/auth/otp";
+import { SignInCodeEmail } from "#email/templates/sign-in-code";
 
 let _resend: Resend | null = null;
 
@@ -16,9 +15,13 @@ function sender() {
   return process.env.EMAIL_FROM ?? "BehindTheStory <auth@behindthestory.co>";
 }
 
-export async function sendSignInCode(to: string, code: string) {
-  const expiresInMinutes = Math.round(OTP_TTL_SECONDS / 60);
-
+/**
+ * The expiry is passed in rather than read from the OTP module: that module
+ * lives in the API, which is what mints the code. Handing the number over with
+ * the job keeps the worker from reaching back into another app's auth
+ * internals just to render a sentence.
+ */
+export async function sendSignInCode(to: string, code: string, expiresInMinutes: number) {
   const { error } = await getResend().emails.send({
     from: sender(),
     to,

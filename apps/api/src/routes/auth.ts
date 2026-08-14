@@ -3,7 +3,10 @@ import { deleteCookie, setCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 
+import { enqueueSignInEmail } from "@behindthestory/jobs/queues";
+
 import {
+  OTP_TTL_SECONDS,
   consumeCode,
   emailKey,
   generateCode,
@@ -20,7 +23,6 @@ import {
   revokeSession,
   startSession,
 } from "#lib/auth/session";
-import { sendSignInCode } from "#lib/email/send";
 import { requireAuth, sessionToken, type AuthEnv } from "#middleware/auth";
 
 const FAILURES = {
@@ -67,11 +69,19 @@ export const authRoutes = new Hono<AuthEnv>()
       await storeCode(email, code);
 
       try {
-        await sendSignInCode(email, code);
+        // Queued rather than sent here: Resend is a third-party round trip on
+        // the critical path of every sign-in, and a slow provider should not
+        // decide how long this request takes. The worker also retries, which
+        // an inline send could not do without holding the caller.
+        await enqueueSignInEmail({
+          email,
+          code,
+          expiresInMinutes: Math.round(OTP_TTL_SECONDS / 60),
+        });
       } catch (error) {
         // Logged, not returned. Surfacing it would leak that we got as far as
         // trying to mail this address.
-        console.error("[auth] could not deliver sign-in code", error);
+        console.error("[auth] could not queue sign-in code", error);
       }
 
       return c.json({ ok: true });

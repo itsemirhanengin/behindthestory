@@ -53,7 +53,29 @@ export default defineRailway(() => {
     },
   });
 
+  /**
+   * No domain and no healthcheck: the worker serves no HTTP. It reaches Redis
+   * and Postgres outbound only, so nothing needs to reach it.
+   */
+  const worker = service("worker", {
+    source: github(REPO, { branch: "main" }),
+    env: {
+      RAILWAY_DOCKERFILE_PATH: "apps/worker/Dockerfile",
+      NODE_ENV: "production",
+      AI_MODEL: "anthropic/claude-sonnet-5",
+
+      DATABASE_URL: preserve(),
+      REDIS_URL: preserve(),
+      // Needed to decrypt queued sign-in codes, which are sealed with a key
+      // derived from this secret rather than written to Redis in the clear.
+      AUTH_SECRET: preserve(),
+      RESEND_API_KEY: preserve(),
+      EMAIL_FROM: preserve(),
+      AI_GATEWAY_API_KEY: preserve(),
+    },
+  });
+
   return project("behindthestory", {
-    resources: [api, studio],
+    resources: [api, studio, worker],
   });
 });

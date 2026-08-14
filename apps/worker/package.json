@@ -1,39 +1,41 @@
 {
-  "name": "@behindthestory/api",
+  "name": "@behindthestory/worker",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": {
-    "./type": "./src/app.ts"
-  },
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "node build.mjs",
     "start": "node --env-file=.env dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "email:dev": "email dev --dir src/email/templates --port 3010"
   },
   "dependencies": {
     "@behindthestory/ai": "workspace:*",
     "@behindthestory/core": "workspace:*",
     "@behindthestory/db": "workspace:*",
     "@behindthestory/jobs": "workspace:*",
-    "@hono/node-server": "^1.19.17",
-    "@hono/zod-validator": "^0.7.4",
+    "@react-email/components": "^1.0.12",
     "ai": "^7.0.59",
     "bullmq": "^5.65.0",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.10.7",
     "ioredis": "^6.0.0",
     "pg": "^8.23.0",
-    "zod": "^4.4.3"
+    "react": "19.2.8",
+    "resend": "^6.19.0"
   },
   "devDependencies": {
+    "@react-email/ui": "^6.9.2",
     "@types/node": "^20",
+    "@types/react": "^19",
     "esbuild": "^0.25.12",
+    "react-email": "^6.9.2",
     "tsx": "^4.20.6",
     "typescript": "^5"
   },
   "imports": {
+    "//": "esbuild stops at the first matching pattern rather than falling through, so the one .tsx file needs an explicit entry ahead of the wildcard. Same reason as apps/api.",
+    "#email/templates/sign-in-code": "./src/email/templates/sign-in-code.tsx",
     "#*": "./src/*.ts"
   }
 }

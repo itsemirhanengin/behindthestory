@@ -11,7 +11,7 @@ import {
   Text,
 } from "@react-email/components";
 
-import { email as c, fonts } from "#lib/email/theme";
+import { email as c, fonts } from "#email/theme";
 
 type Props = {
   code: string;

@@ -14,9 +14,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/studio/package.json apps/studio/
+COPY apps/worker/package.json apps/worker/
 COPY packages/ai/package.json packages/ai/
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/
+COPY packages/jobs/package.json packages/jobs/
 RUN pnpm install --frozen-lockfile --filter @behindthestory/studio...
 
 COPY . .

@@ -92,6 +92,15 @@ export function useIndexStatus(chapterId: string, options?: { enabled?: boolean 
       return res.json();
     },
     enabled: (options?.enabled ?? true) && Boolean(chapterId),
+    /**
+     * Indexing runs in the worker now, so the mutation returning is not the
+     * end of the job. Poll while one is in flight and stop once it settles —
+     * a chapter that is merely stale does not need to be watched.
+     */
+    refetchInterval: (query) => {
+      const state = query.state.data?.state;
+      return state === "queued" || state === "running" ? 2_000 : false;
+    },
   });
 }
 

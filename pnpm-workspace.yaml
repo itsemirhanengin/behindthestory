@@ -2,7 +2,12 @@ packages:
   - "apps/*"
   - "packages/*"
 
-# Both ship prebuilt native binaries and need their install scripts to run.
 allowBuilds:
+  # These two ship prebuilt native binaries and need their install scripts.
   esbuild: true
   unrs-resolver: true
+  # Optional native accelerator that msgpackr — reached through BullMQ — uses
+  # when present and otherwise substitutes with pure JS. Declined on purpose:
+  # it speeds up job serialisation, which is not a bottleneck here, and a
+  # native build is one more thing that can fail inside the Alpine images.
+  msgpackr-extract: false

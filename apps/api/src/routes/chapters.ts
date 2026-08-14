@@ -10,7 +10,7 @@ import {
   chapters,
   getDb,
 } from "@behindthestory/db";
-import { indexChapter } from "@behindthestory/core/canon-index";
+import { chapterIndexState, enqueueChapterIndex } from "@behindthestory/jobs/queues";
 
 import { assertChapter, requireAuth, type AuthEnv } from "#middleware/auth";
 
@@ -77,7 +77,12 @@ export const chapterRoutes = new Hono<AuthEnv>()
 
     return c.json(updated);
   })
-  /** Whether this chapter's prose is currently retrievable, and how stale it is. */
+  /**
+   * Whether this chapter's prose is currently retrievable, how stale it is, and
+   * whether a rebuild is in flight. The queue is consulted first: while a job is
+   * pending the chunk count still describes the *previous* index, and reporting
+   * that alone would make a running rebuild look like nothing happened.
+   */
   .get("/:chapterId/index", async (c) => {
     const chapterId = c.req.param("chapterId");
     await assertChapter(c.get("user").id, chapterId);
@@ -89,24 +94,29 @@ export const chapterRoutes = new Hono<AuthEnv>()
       })
       .from(canonChunks)
       .where(eq(canonChunks.sourceId, chapterId));
-    return c.json(row ?? { chunks: 0, indexedAt: null });
+
+    const job = await chapterIndexState(chapterId);
+
+    return c.json({
+      chunks: row?.chunks ?? 0,
+      indexedAt: row?.indexedAt ?? null,
+      state: job?.status ?? "idle",
+      failedReason: job?.status === "failed" ? job.reason : null,
+    });
   })
+  /**
+   * Hands the work to the worker rather than doing it here. Embedding a long
+   * chapter runs for minutes; holding an HTTP request open for that means the
+   * writer's browser owns the lifetime of the job, and a closed tab or a
+   * container replacement loses it halfway through.
+   */
   .post("/:chapterId/index", async (c) => {
     const chapter = await loadChapter(c.get("user").id, c.req.param("chapterId"));
 
-    try {
-      const result = await indexChapter(chapter.novelId, chapter);
-      return c.json({ ok: true, ...result });
-    } catch (error) {
-      console.error("[canon-index]", error);
-      return c.json(
-        {
-          error:
-            "Failed to index this chapter. Embeddings run through the AI provider — check model access and credits.",
-        },
-        502,
-      );
-    }
+    await enqueueChapterIndex({ chapterId: chapter.id, novelId: chapter.novelId });
+
+    // 202: accepted, not done. Progress is read back from the GET above.
+    return c.json({ queued: true, state: "queued" as const }, 202);
   })
   .get("/:chapterId/revisions", async (c) => {
     const chapterId = c.req.param("chapterId");

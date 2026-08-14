@@ -14,8 +14,7 @@
     "db:migrate-events": "node --env-file=.env.local scripts/migrate-to-events.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed.mjs",
     "db:recolor": "node --env-file=.env.local scripts/recolor-characters.mjs",
-    "db:claim": "node --env-file=.env.local scripts/db-claim.mjs",
-    "email:dev": "email dev --dir src/lib/email/templates --port 3010"
+    "db:claim": "node --env-file=.env.local scripts/db-claim.mjs"
   },
   "dependencies": {
     "@behindthestory/ai": "workspace:*",
@@ -24,7 +23,6 @@
     "@behindthestory/db": "workspace:*",
     "@dnd-kit/core": "^6.3.1",
     "@neondatabase/serverless": "^1.1.0",
-    "@react-email/components": "^1.0.12",
     "@remixicon/react": "^4.9.0",
     "@tanstack/react-query": "^5.101.4",
     "@tiptap/core": "^3.30.0",
@@ -56,7 +54,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@react-email/ui": "^6.9.2",
     "@tailwindcss/postcss": "^4",
     "@tanstack/react-query-devtools": "^5.101.4",
     "@types/node": "^20",
@@ -66,7 +63,6 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
-    "react-email": "^6.9.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

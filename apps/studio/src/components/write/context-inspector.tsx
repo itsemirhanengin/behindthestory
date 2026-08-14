@@ -106,12 +106,11 @@ export function ContextInspector({
 
   async function reindex() {
     try {
-      const result = await reindexChapter.mutateAsync();
-      toast.success(
-        "chunks" in result && result.chunks
-          ? `Indexed ${result.chunks} passage(s) from this chapter`
-          : "Nothing to index — this chapter is empty",
-      );
+      // The request only enqueues; the worker does the embedding. The status
+      // query polls itself from here on, so the toast promises a start rather
+      // than a result.
+      await reindexChapter.mutateAsync();
+      toast.success("Indexing this chapter — the passage count updates as it finishes");
       await refetchIndex();
     } catch (e) {
       toast.error((e as Error).message);

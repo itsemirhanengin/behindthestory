@@ -1,0 +1,22 @@
+{
+  "name": "@behindthestory/jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//": "The queue contract. The API produces, the worker consumes; both need the same names, payload shapes and connection settings.",
+  "exports": {
+    "./connection": "./src/connection.ts",
+    "./queues": "./src/queues.ts",
+    "./sealed-code": "./src/sealed-code.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bullmq": "^5.65.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}
