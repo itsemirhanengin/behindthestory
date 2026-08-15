@@ -82,12 +82,16 @@ export default defineRailway((ctx) => {
    * it starts up perfectly and fails on its first query.
    *
    * Giving each environment its own name keeps every database a resource this
-   * file genuinely owns. Production carries the suffix rather than dev only
-   * because dev was applied first and already holds the bare names; renaming
-   * it now would mean destroying a database to rename it.
+   * file genuinely owns in the environment it belongs to.
+   *
+   * Renaming an existing one is a rename in Railway but not in this file: the
+   * planner matches resources by name, so editing a name here reads as "delete
+   * that database, create this one". Rename the service first — Railway keeps
+   * the volume — and only then change the string, so the plan has nothing left
+   * to destroy.
    */
-  const db = postgres(isProduction ? "postgres-prod" : "postgres");
-  const cache = redis(isProduction ? "redis-prod" : "redis");
+  const db = postgres(isProduction ? "postgres-prod" : "postgres-dev");
+  const cache = redis(isProduction ? "redis-prod" : "redis-dev");
 
   /** Which branch this environment deploys. */
   const branch = isProduction ? "main" : "dev";
