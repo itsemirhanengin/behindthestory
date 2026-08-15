@@ -1,5 +1,7 @@
 import { build } from "esbuild";
 
+import { assertExternalsAreDeclared } from "../../scripts/bundle-externals.mjs";
+
 /**
  * Bundles the workspace packages, externalises everything else.
  *
@@ -26,7 +28,7 @@ const bundleWorkspaceOnly = {
   },
 };
 
-await build({
+const result = await build({
   entryPoints: ["src/index.ts"],
   bundle: true,
   platform: "node",
@@ -35,4 +37,9 @@ await build({
   outfile: "dist/index.js",
   plugins: [bundleWorkspaceOnly],
   logLevel: "info",
+  metafile: true,
 });
+
+// Everything externalised above has to exist in the runtime image, and the
+// Dockerfile builds that from this manifest alone. See scripts/.
+assertExternalsAreDeclared(result.metafile, "package.json");
