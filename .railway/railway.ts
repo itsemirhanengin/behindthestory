@@ -67,8 +67,27 @@ export default defineRailway((ctx) => {
    * when PITR is enabled, not retroactively, so a database that has been
    * running unprotected for a month cannot be rewound into that month.
    */
-  const db = postgres("postgres");
-  const cache = redis("redis");
+  /**
+   * The names differ per environment because Railway service names are unique
+   * across the whole project, not per environment.
+   *
+   * That constraint is not obvious and it bites exactly once, in a way that
+   * looks like a platform failure rather than a naming rule. A database
+   * declared under one name is created as a single project-wide service with
+   * an instance in whichever environment was applied first. Applying the same
+   * file to a second environment then reports `+ Create database postgres`,
+   * exits successfully, and creates nothing — the service already exists, so
+   * there is nothing to create, and the second environment is left with an
+   * instance-less reference that resolves to an empty string. An app wired to
+   * it starts up perfectly and fails on its first query.
+   *
+   * Giving each environment its own name keeps every database a resource this
+   * file genuinely owns. Production carries the suffix rather than dev only
+   * because dev was applied first and already holds the bare names; renaming
+   * it now would mean destroying a database to rename it.
+   */
+  const db = postgres(isProduction ? "postgres-prod" : "postgres");
+  const cache = redis(isProduction ? "redis-prod" : "redis");
 
   /** Which branch this environment deploys. */
   const branch = isProduction ? "main" : "dev";
