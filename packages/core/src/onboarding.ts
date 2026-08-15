@@ -51,20 +51,6 @@ export type StyleRationale = {
 
 export type StyleProposal = StyleFields & { rationale: StyleRationale };
 
-/**
- * Usage from a wizard AI call. The novel these belong to does not exist yet, so
- * the client carries them to the end and `POST /api/novels` writes them to the
- * usage log — otherwise the first two generations of a novel's life would be the
- * only ones that never show up in its cost breakdown.
- */
-export type WizardUsage = {
-  route: "onboarding-reading" | "onboarding-style";
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  durationMs: number;
-};
-
 /** One round of the author correcting the reading, and the AI's reply to it. */
 export type WizardTurn = { correction: string; changeNote: string };
 
@@ -77,11 +63,18 @@ export type ReadingRequest = {
   previous: Reading | null;
 };
 
-export type ReadingResponse = { reading: Reading; usage: WizardUsage };
+/**
+ * No usage travels with these. The wizard used to carry token counts to the
+ * end and hand them to `POST /api/novels`, which was the one place a client
+ * could dictate what it had spent — fine as analytics, unusable now that the
+ * same numbers decide what a workspace is charged. The server meters both
+ * calls against the workspace instead.
+ */
+export type ReadingResponse = { reading: Reading };
 
 export type StyleRequest = { title: string; reading: Reading };
 
-export type StyleResponse = { style: StyleProposal; usage: WizardUsage };
+export type StyleResponse = { style: StyleProposal };
 
 export const CHAPTER_WORDS = { min: 600, max: 5000, step: 100 } as const;
 

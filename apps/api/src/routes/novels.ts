@@ -1,17 +1,18 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
 
 import {
   getDb,
   novels,
+  workspaceMembers,
   POV_VALUES,
   TENSE_VALUES,
 } from "@behindthestory/db";
-import { logGeneration } from "@behindthestory/ai";
 
 import { assertNovel, requireAuth, type AuthEnv } from "#middleware/auth";
+import { primaryWorkspaceId } from "#lib/auth/workspace";
 
 /**
  * The new-novel wizard sends the whole style contract in one shot, since it has
@@ -27,24 +28,6 @@ const createSchema = z.object({
   tense: z.enum(TENSE_VALUES).optional(),
   targetChapterWords: z.number().int().min(200).max(20_000).optional(),
   styleNotes: z.string().max(20_000).optional(),
-  /**
-   * Generations spent inside the wizard, before this novel had an id to log
-   * them against. Client-reported by necessity — the alternative is that the
-   * two calls that shaped the entire novel are the only ones missing from its
-   * cost breakdown.
-   */
-  aiUsage: z
-    .array(
-      z.object({
-        route: z.string().max(60),
-        model: z.string().max(200),
-        inputTokens: z.number().int().min(0).max(10_000_000),
-        outputTokens: z.number().int().min(0).max(10_000_000),
-        durationMs: z.number().int().min(0).max(3_600_000),
-      }),
-    )
-    .max(40)
-    .default([]),
 });
 
 const patchSchema = z.object({
@@ -61,26 +44,32 @@ const patchSchema = z.object({
 export const novelRoutes = new Hono<AuthEnv>()
   .use("*", requireAuth)
   .get("/", async (c) => {
+    // Every workspace the caller belongs to, not just their personal one — a
+    // Team member should see the shelf they are actually writing on.
     const rows = await getDb()
-      .select()
+      .select(getTableColumns(novels))
       .from(novels)
-      .where(eq(novels.ownerId, c.get("user").id))
+      .innerJoin(
+        workspaceMembers,
+        eq(workspaceMembers.workspaceId, novels.workspaceId),
+      )
+      .where(eq(workspaceMembers.userId, c.get("user").id))
       .orderBy(desc(novels.createdAt));
     return c.json(rows);
   })
   .post("/", zValidator("json", createSchema), async (c) => {
-    const { aiUsage, ...values } = c.req.valid("json");
+    const user = c.get("user");
 
-    // Ownership is set here and never accepted from the client — it is the only
-    // thing standing between two accounts' manuscripts.
+    // Both ids are set here and never accepted from the client. The workspace
+    // is what authorisation and billing key off; the owner is attribution.
     const [row] = await getDb()
       .insert(novels)
-      .values({ ...values, ownerId: c.get("user").id })
+      .values({
+        ...c.req.valid("json"),
+        workspaceId: await primaryWorkspaceId(user.id),
+        ownerId: user.id,
+      })
       .returning();
-
-    for (const entry of aiUsage) {
-      await logGeneration({ novelId: row.id, ...entry });
-    }
 
     return c.json(row, 201);
   })

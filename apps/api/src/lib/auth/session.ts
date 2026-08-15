@@ -3,6 +3,8 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
 import { getDb, sessions, users, type SESSION_CLIENT_VALUES } from "@behindthestory/db";
 
+import { provisionPersonalWorkspace } from "#lib/auth/workspace";
+
 export type SessionClient = (typeof SESSION_CLIENT_VALUES)[number];
 
 export const SESSION_COOKIE = "bts_session";
@@ -34,6 +36,10 @@ export function sessionExpiry(from = new Date()) {
  * Finds or creates the account for a verified address and opens a session for
  * it, in one transaction so a first sign-in cannot leave a user without a
  * session or a session pointing at a half-written user.
+ *
+ * A brand-new account also gets its personal workspace here, for the same
+ * reason: an account with no workspace can authenticate but cannot own
+ * anything, and every write path would need a branch for that state.
  */
 export async function startSession(input: {
   email: string;
@@ -60,6 +66,8 @@ export async function startSession(input: {
           .values({ email: input.email })
           .returning()
       )[0];
+
+    if (!existing) await provisionPersonalWorkspace(tx, account);
 
     await tx.update(users).set({ lastSeenAt: new Date() }).where(eq(users.id, account.id));
 

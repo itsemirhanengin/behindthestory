@@ -52,11 +52,12 @@ import {
   fetchRelationships,
   fetchStoryEvents,
 } from "@/lib/queries/story";
+import { notifyIfOutOfWords } from "@/lib/out-of-words";
 import { cn } from "@/lib/utils";
 import {
   consumeProseStream,
   type ProsePhase,
-  type ProseUsage,
+  type ProseWireUsage,
 } from "@behindthestory/core/prose-stream";
 import { useNovelWorkspace } from "@/components/novel-workspace";
 import { AnalyzeDialog } from "./analyze-dialog";
@@ -422,7 +423,7 @@ export function WritingStudio({
             });
           }
         },
-        onUsage: (usage: ProseUsage) => {
+        onUsage: (usage: ProseWireUsage) => {
           setSuggestion((current) =>
             current?.id === id ? { ...current, usage } : current,
           );
@@ -430,6 +431,9 @@ export function WritingStudio({
       });
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
+        // The streaming endpoints do not go through TanStack's mutation cache,
+        // so the out-of-words toast has to be raised here too.
+        notifyIfOutOfWords(error);
         failure = (error as Error).message;
       }
     } finally {

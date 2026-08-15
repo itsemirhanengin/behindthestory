@@ -1,10 +1,12 @@
 import { Worker } from "bullmq";
 
 import { queueConnection } from "@behindthestory/jobs/connection";
-import { QUEUE_NAMES } from "@behindthestory/jobs/queues";
+import { QUEUE_NAMES, registerSchedules } from "@behindthestory/jobs/queues";
 
+import { processBillingReconcile } from "#processors/billing-reconcile";
 import { processChapterIndex } from "#processors/chapter-index";
 import { processSignInEmail } from "#processors/sign-in-email";
+import { processWordHoldsSweep } from "#processors/word-holds";
 
 /**
  * Indexing is embedding-bound and bursty; mail is latency-sensitive and cheap.
@@ -22,7 +24,28 @@ const workers = [
     concurrency: 10,
     connection: queueConnection(),
   }),
+  /**
+   * The two billing sweeps. Both are periodic and both walk every affected
+   * row, so a second copy running concurrently would only duplicate work —
+   * hence concurrency 1. Their own operations are idempotent regardless.
+   */
+  new Worker(QUEUE_NAMES.wordHolds, () => processWordHoldsSweep(), {
+    concurrency: 1,
+    connection: queueConnection(),
+  }),
+  new Worker(QUEUE_NAMES.billingReconcile, () => processBillingReconcile(), {
+    concurrency: 1,
+    connection: queueConnection(),
+  }),
 ];
+
+/**
+ * Asserted on every boot rather than declared in Railway. `upsertJobScheduler`
+ * is keyed, so restarting or scaling the worker re-asserts the same schedules
+ * instead of accumulating duplicates, and changing an interval ships with the
+ * code that depends on it.
+ */
+await registerSchedules();
 
 for (const worker of workers) {
   worker.on("failed", (job, error) => {

@@ -19,7 +19,8 @@
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.tsx"
+    "src/**/*.tsx",
+    "scripts/**/*.mts"
   ],
   "exclude": [
     "node_modules",

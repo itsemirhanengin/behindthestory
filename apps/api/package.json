@@ -10,6 +10,9 @@
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "node build.mjs",
     "start": "node --env-file=.env dist/index.js",
+    "check:balance": "tsx scripts/check-word-balance.mts",
+    "check:metering": "tsx scripts/check-metering.mts",
+    "check:webhook": "tsx scripts/check-billing-webhook.mts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -30,6 +33,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "esbuild": "^0.25.12",
+    "standardwebhooks": "^1.0.0",
     "tsx": "^4.20.6",
     "typescript": "^5"
   },

@@ -12,7 +12,7 @@ import {
   aiSuggestionFeedback,
   getDb,
 } from "@behindthestory/db";
-import { MODELS, NOVELIST_PERSONA, logGeneration } from "@behindthestory/ai";
+import { NOVELIST_PERSONA } from "@behindthestory/ai";
 import {
   activeSpine,
   buildStoryContext,
@@ -26,6 +26,7 @@ import {
 } from "@behindthestory/core/story-state";
 
 import { assertNovel, requireAuth, type AuthEnv } from "#middleware/auth";
+import { openMeter } from "#lib/billing/meter";
 
 const ISSUE_TYPES = [
   "contradiction",
@@ -200,9 +201,14 @@ export const aiReviewRoutes = new Hono<AuthEnv>()
       if (!chapter) throw new HTTPException(404, { message: "Chapter not found" });
       if (!chapter.content.trim()) return c.json({ issues: [] });
 
-      const started = Date.now();
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "continuity",
+        novelId,
+      });
       const { output, usage } = await generateText({
-        model: MODELS.utility,
+        model: meter.model,
+        maxOutputTokens: meter.maxOutputTokens,
         instructions:
           NOVELIST_PERSONA +
           ` You are acting as a continuity editor, not a writing coach. Report only concrete, checkable conflicts against the provided story context — never taste, pacing or general suggestions for improvement. Every quote must be copied verbatim from the chapter. If the chapter is consistent, return an empty list; a clean chapter is a valid and common result.`,
@@ -215,17 +221,9 @@ ${chapter.content}
 
 ---
 Task: Find every place where this chapter conflicts with the story context above — established character facts and status, relationship state, resolved or planted threads, timeline and geography, documented character voice, and the binding style contract. Order the issues by severity.`,
-      });
+      }).catch(meter.abort);
 
-      await logGeneration({
-        novelId,
-        chapterId,
-        route: "continuity",
-        model: MODELS.utility,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        durationMs: Date.now() - started,
-      });
+      await meter.settle({ usage, chapterId });
 
       // The model occasionally paraphrases a quote; a quote that is not in the
       // chapter cannot be highlighted, so mark it rather than silently failing.
@@ -272,26 +270,23 @@ Task: Find every place where this chapter conflicts with the story context above
         .map((e) => `${e.id} = [${e.type}] ${e.title}`)
         .join("\n");
 
-      const started = Date.now();
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "analyze",
+        novelId,
+      });
       const { output, usage } = await generateText({
-        model: MODELS.utility,
+        model: meter.model,
+        maxOutputTokens: meter.maxOutputTokens,
         instructions:
           NOVELIST_PERSONA +
           ` You are acting as a meticulous story-bible keeper. Extract only what the chapter text actually establishes. Use ONLY the ids provided in the rosters; never invent ids. If nothing applies to a category, return an empty array for it.` +
           ` Relationship and status changes are recorded as a timeline the author will read hundreds of chapters later, so every one needs a CAUSE — what in this chapter did it — and, where a person is responsible, who. Report a change only if this chapter actually moved it; unchanged bonds belong in no array at all.`,
         output: Output.object({ schema: analysisSchema }),
         prompt: `${context.text}\n\n## Character ids\n${roster}\n\n## Relationship ids and their state entering this chapter\n${relRoster || "(none)"}\n\n## Open story element ids\n${elementRoster || "(none)"}\n\n---\n## Chapter ${chapter.number}: "${chapter.title}" — full text to analyze\n${chapter.content}\n\n---\nTask: Analyze this chapter and extract story-memory updates: a summary, new story elements (twists, planted foreshadowing, plot threads, notable events), which open elements it resolves, relationship changes (with their cause), character status changes such as a death or disappearance (with who is responsible and how), brand-new relationships, and new character facts.`,
-      });
+      }).catch(meter.abort);
 
-      await logGeneration({
-        novelId,
-        chapterId,
-        route: "analyze",
-        model: MODELS.utility,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        durationMs: Date.now() - started,
-      });
+      await meter.settle({ usage, chapterId });
 
       return c.json(output);
     },
@@ -341,22 +336,20 @@ Task: Find every place where this chapter conflicts with the story context above
             : "")
         : "(no chapters written yet — infer from character profiles and premise)";
 
-      const started = Date.now();
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "relationships",
+        novelId,
+      });
       const { output, usage } = await generateText({
-        model: MODELS.utility,
+        model: meter.model,
+        maxOutputTokens: meter.maxOutputTokens,
         instructions: NOVELIST_PERSONA,
         output: Output.object({ schema: suggestionSchema }),
         prompt: `${context.text}\n\n## Chapter evidence\n${evidence}\n\n---\nTask: Suggest relationships between characters that are implied by the story but NOT yet recorded in the Relationships section. Use ONLY these character ids:\n${roster}\n\nDo not suggest a pair that already has a relationship. Return an empty list if nothing new is implied.`,
-      });
+      }).catch(meter.abort);
 
-      await logGeneration({
-        novelId,
-        route: "relationships",
-        model: MODELS.utility,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        durationMs: Date.now() - started,
-      });
+      await meter.settle({ usage });
 
       const validIds = new Set(bundle.characters.map((ch) => ch.id));
       return c.json({

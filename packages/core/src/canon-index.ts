@@ -1,7 +1,7 @@
 import { embed, embedMany } from "ai";
 import { and, cosineDistance, desc, eq, gt, ne, sql } from "drizzle-orm";
-import { getDb, canonChunks, type Chapter } from "@behindthestory/db";
-import { MODELS } from "@behindthestory/ai";
+import { getDb, canonChunks, novels, type Chapter } from "@behindthestory/db";
+import { MODELS, recordEmbedding } from "@behindthestory/ai";
 import { estimateTokens, type RetrievedPassage } from "./context-builder";
 
 /** Target size of an indexed passage. Big enough to hold a scene beat. */
@@ -54,10 +54,37 @@ export async function indexChapter(
   const chunks = chunkProse(chapter.content);
   if (chunks.length === 0) return { chunks: 0 };
 
-  const { embeddings } = await embedMany({
+  const started = Date.now();
+  const { embeddings, usage } = await embedMany({
     model: MODELS.embedding,
     values: chunks,
   });
+
+  /**
+   * The only AI spend that used to be completely invisible: this runs in the
+   * worker on every chapter save, so nobody watching a novel's usage panel
+   * ever saw it. Charged at zero words — see `recordEmbedding` — but no longer
+   * missing from the ledger.
+   *
+   * Retrieval embedding, in `retrievePassages` below, is deliberately not
+   * recorded: it costs about four millionths of a dollar and belongs to the
+   * generation that triggered it, which is already being metered.
+   */
+  const [novel] = await db
+    .select({ workspaceId: novels.workspaceId })
+    .from(novels)
+    .where(eq(novels.id, novelId));
+
+  if (novel?.workspaceId) {
+    await recordEmbedding({
+      workspaceId: novel.workspaceId,
+      novelId,
+      chapterId: chapter.id,
+      tokens: usage.tokens,
+      durationMs: Date.now() - started,
+      requestId: `embedding:${chapter.id}:${Date.now()}`,
+    });
+  }
 
   await db.insert(canonChunks).values(
     chunks.map((content, seq) => ({

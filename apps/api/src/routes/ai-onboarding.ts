@@ -4,7 +4,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { POV_VALUES, TENSE_VALUES } from "@behindthestory/db";
-import { MODELS, NOVELIST_PERSONA } from "@behindthestory/ai";
+import { NOVELIST_PERSONA } from "@behindthestory/ai";
 import {
   CHAPTER_WORDS,
   MIN_DESCRIPTION_WORDS,
@@ -16,6 +16,8 @@ import {
 } from "@behindthestory/core/onboarding";
 
 import { requireAuth, type AuthEnv } from "#middleware/auth";
+import { primaryWorkspaceId } from "#lib/auth/workspace";
+import { openMeter } from "#lib/billing/meter";
 
 /**
  * `satisfies` rather than a bare annotation: the concrete zod type is what the
@@ -130,8 +132,10 @@ function describePrevious(previous: Reading): string {
  * The pre-writing interview.
  *
  * These run before a novel row exists, so there is nothing to check ownership
- * against — a signed-in account is the whole requirement. An abandoned wizard
- * leaves nothing behind, and usage is logged against the novel once created.
+ * against — a signed-in account is the whole requirement, and the caller's own
+ * workspace is what pays. An abandoned wizard leaves nothing behind except the
+ * usage rows for whatever it generated, which is the honest outcome: the
+ * tokens were spent whether or not a novel came of it.
  */
 export const aiOnboardingRoutes = new Hono<AuthEnv>()
   .use("*", requireAuth)
@@ -175,9 +179,18 @@ export const aiOnboardingRoutes = new Hono<AuthEnv>()
         sections.push(`## Your previous reading\n${describePrevious(previous)}`);
       }
 
-      const started = Date.now();
+      // No novel exists yet, so the workspace comes straight from the caller.
+      // These two calls used to be the only generations nobody was charged
+      // for — the client reported their token counts and the server believed
+      // it, which is not a number that can decide a bill.
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "onboarding:reading",
+        workspaceId: await primaryWorkspaceId(c.get("user").id),
+      });
       const { output, usage } = await generateText({
-        model: MODELS.writing,
+        model: meter.model,
+        maxOutputTokens: meter.maxOutputTokens,
         instructions:
           NOVELIST_PERSONA +
           ` You are in the pre-writing interview for a novel that does not exist yet. Your job is to prove you understood the author, not to impress them: no flattery, no embellishment, no plot you were not given. Where the description is silent you may infer — but every inference must be declared.`,
@@ -192,7 +205,7 @@ Rules:
 - Apply every correction the author has given you. If any are present, say what changed in \`changeNote\`.
 - \`assumptions\` is the field the author audits. List what you decided for them, not what they told you.
 - \`premise\` is the paragraph the whole novel will be generated against. Make it specific enough to constrain a chapter and short enough to read in one breath.`,
-      });
+      }).catch(meter.abort);
 
       const reading: Reading = {
         ...output,
@@ -203,16 +216,9 @@ Rules:
         changeNote: rounds.length ? output.changeNote.trim() : "",
       };
 
-      const body: ReadingResponse = {
-        reading,
-        usage: {
-          route: "onboarding-reading",
-          model: MODELS.writing,
-          inputTokens: usage.inputTokens ?? 0,
-          outputTokens: usage.outputTokens ?? 0,
-          durationMs: Date.now() - started,
-        },
-      };
+      await meter.settle({ usage });
+
+      const body: ReadingResponse = { reading };
       return c.json(body);
     },
   )
@@ -241,9 +247,18 @@ Rules:
     async (c) => {
       const { title, reading } = c.req.valid("json");
 
-      const started = Date.now();
+      // No novel exists yet, so the workspace comes straight from the caller.
+      // These two calls used to be the only generations nobody was charged
+      // for — the client reported their token counts and the server believed
+      // it, which is not a number that can decide a bill.
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "onboarding:style",
+        workspaceId: await primaryWorkspaceId(c.get("user").id),
+      });
       const { output, usage } = await generateText({
-        model: MODELS.writing,
+        model: meter.model,
+        maxOutputTokens: meter.maxOutputTokens,
         instructions:
           NOVELIST_PERSONA +
           ` You are setting the house style for a new novel. Be opinionated: a style profile that would fit any book is worse than none, because it will be obeyed on every chapter for the life of the novel.`,
@@ -259,23 +274,16 @@ Themes: ${reading.themes.join(", ")}
 
 ---
 Task: Propose the style contract this novel should be written under, and justify each choice against this specific story.`,
-      });
+      }).catch(meter.abort);
 
       const style: StyleProposal = {
         ...output,
         targetChapterWords: snapWords(output.targetChapterWords),
       };
 
-      const body: StyleResponse = {
-        style,
-        usage: {
-          route: "onboarding-style",
-          model: MODELS.writing,
-          inputTokens: usage.inputTokens ?? 0,
-          outputTokens: usage.outputTokens ?? 0,
-          durationMs: Date.now() - started,
-        },
-      };
+      await meter.settle({ usage });
+
+      const body: StyleResponse = { style };
       return c.json(body);
     },
   );

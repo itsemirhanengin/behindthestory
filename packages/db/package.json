@@ -7,9 +7,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
-    "./registry": "./src/registry.ts"
+    "./registry": "./src/registry.ts",
+    "./migrate": "./src/migrate.ts"
   },
   "scripts": {
+    "db:backfill-workspaces": "node scripts/backfill-workspaces.mjs",
+    "db:baseline": "node scripts/baseline.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:reset": "node scripts/reset.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^20.19.43",
     "@types/pg": "^8.21.0",
+    "drizzle-kit": "^0.31.10",
     "typescript": "^5"
   }
 }

@@ -1,12 +1,34 @@
-import { getDb, aiGenerations, type Novel } from "@behindthestory/db";
+import {
+  getDb,
+  aiGenerations,
+  type Novel,
+  type UsageSource,
+} from "@behindthestory/db";
+
+import {
+  DEFAULT_MODEL,
+  UTILITY_MODEL,
+  embeddingUsdCost,
+  usdCost,
+  type ModelId,
+  type TokenUsage,
+} from "./models";
+
+export * from "./models";
 
 /**
- * Gateway model strings. Writing wants the strongest model; extraction and
- * critique are cheaper jobs that do not need it.
+ * Gateway model strings.
+ *
+ * `writing` is only the fallback now — which model a prose generation runs on
+ * is a per-workspace choice resolved through `resolveWritingModel` in
+ * `@behindthestory/core/plans`, because it is also what the workspace is
+ * charged for. Extraction and critique stay pinned to `utility`: the quality
+ * difference does not justify the price spread, and a fixed model is what
+ * lets those routes carry a published flat price.
  */
 export const MODELS = {
-  writing: process.env.AI_MODEL ?? "anthropic/claude-opus-5",
-  utility: process.env.AI_UTILITY_MODEL ?? "anthropic/claude-sonnet-5",
+  writing: process.env.AI_MODEL ?? DEFAULT_MODEL,
+  utility: process.env.AI_UTILITY_MODEL ?? UTILITY_MODEL,
   embedding: process.env.AI_EMBEDDING_MODEL ?? "openai/text-embedding-3-small",
 } as const;
 
@@ -41,32 +63,89 @@ export function compileStyleDirective(novel: Novel): string {
   return `## Style contract (binding)\n${lines.join("\n")}`;
 }
 
-/**
- * Records what a generation cost. Failures here must never break a generation,
- * so everything is swallowed and logged.
- */
-export async function logGeneration(entry: {
-  novelId: string;
+export type GenerationRecord = {
+  workspaceId: string;
+  userId?: string | null;
+  novelId?: string | null;
   chapterId?: string | null;
   route: string;
-  model: string;
-  inputTokens?: number;
-  outputTokens?: number;
+  model: ModelId;
+  usage: TokenUsage;
+  wordsCharged: number;
   durationMs?: number;
+  /** Idempotency key, shared with this generation's ledger rows. */
+  requestId: string;
+  source?: UsageSource;
+};
+
+/**
+ * Records what a generation cost, and what the workspace was charged for it.
+ *
+ * This used to swallow every error on the grounds that a failed log must not
+ * break a generation. That was right when the row was analytics. It is now the
+ * evidence behind a bill and the join target for the ledger, so a write that
+ * fails has to be visible: the caller runs it inside the same settle path that
+ * moves the balance, and a silent loss there is revenue that no longer exists.
+ */
+export async function recordGeneration(entry: GenerationRecord) {
+  const [row] = await getDb()
+    .insert(aiGenerations)
+    .values({
+      workspaceId: entry.workspaceId,
+      userId: entry.userId ?? null,
+      novelId: entry.novelId ?? null,
+      chapterId: entry.chapterId ?? null,
+      route: entry.route,
+      model: entry.model,
+      inputTokens: Math.round(entry.usage.inputTokens ?? 0),
+      outputTokens: Math.round(entry.usage.outputTokens ?? 0),
+      cacheReadTokens: Math.round(entry.usage.cacheReadTokens ?? 0),
+      cacheWriteTokens: Math.round(entry.usage.cacheWriteTokens ?? 0),
+      reasoningTokens: Math.round(entry.usage.reasoningTokens ?? 0),
+      usdCost: usdCost(entry.model, entry.usage).toFixed(6),
+      wordsCharged: Math.round(entry.wordsCharged),
+      source: entry.source ?? "platform",
+      requestId: entry.requestId,
+      durationMs: Math.round(entry.durationMs ?? 0),
+    })
+    .onConflictDoNothing({ target: aiGenerations.requestId })
+    .returning({ id: aiGenerations.id });
+
+  return row?.id ?? null;
+}
+
+/**
+ * Records an embedding call.
+ *
+ * Separate from `recordGeneration` because the embedding model is not on the
+ * catalogue — it is chosen by the vector column's dimension, not by the
+ * writer, and it has no output side to price.
+ *
+ * Charged at zero words: indexing a chapter costs about $0.00005, and a line
+ * item that small costs more in explaining than it recovers. It is recorded so
+ * that "where is the money going" has a complete answer.
+ */
+export async function recordEmbedding(entry: {
+  workspaceId: string;
+  novelId?: string | null;
+  chapterId?: string | null;
+  tokens: number;
+  durationMs?: number;
+  requestId: string;
 }) {
-  try {
-    await getDb()
-      .insert(aiGenerations)
-      .values({
-        novelId: entry.novelId,
-        chapterId: entry.chapterId ?? null,
-        route: entry.route,
-        model: entry.model,
-        inputTokens: Math.round(entry.inputTokens ?? 0),
-        outputTokens: Math.round(entry.outputTokens ?? 0),
-        durationMs: Math.round(entry.durationMs ?? 0),
-      });
-  } catch (error) {
-    console.error("[ai] failed to log generation", error);
-  }
+  await getDb()
+    .insert(aiGenerations)
+    .values({
+      workspaceId: entry.workspaceId,
+      novelId: entry.novelId ?? null,
+      chapterId: entry.chapterId ?? null,
+      route: "embedding",
+      model: MODELS.embedding,
+      inputTokens: Math.round(entry.tokens),
+      usdCost: embeddingUsdCost(entry.tokens).toFixed(6),
+      wordsCharged: 0,
+      requestId: entry.requestId,
+      durationMs: Math.round(entry.durationMs ?? 0),
+    })
+    .onConflictDoNothing({ target: aiGenerations.requestId });
 }

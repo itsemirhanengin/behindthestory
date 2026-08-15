@@ -1,0 +1,50 @@
+# The local development stack.
+#
+# Exists so that `pnpm dev` never touches production. Before this, every local
+# .env pointed at the live Neon database and the live Upstash Redis, which
+# meant a stray `db:reset`, a seed script, or an experiment with someone's
+# subscription was operating on real writers' manuscripts.
+#
+#   docker compose up -d
+#   pnpm db:reset          # builds the schema from migrations
+#   pnpm dev
+#
+# Ports are deliberately non-default: 5432 and 6379 are what a machine-wide
+# Postgres or Redis would already be sitting on, and a dev stack that silently
+# connects to the wrong one is the problem this file is here to solve.
+services:
+  postgres:
+    # pgvector rather than plain postgres: canon_chunks stores embeddings, and
+    # the migrations create a `vector(1536)` column plus an HNSW index.
+    image: pgvector/pgvector:pg17
+    container_name: bts-postgres
+    environment:
+      POSTGRES_USER: bts
+      POSTGRES_PASSWORD: bts
+      POSTGRES_DB: bts
+    ports:
+      - "55432:5432"
+    volumes:
+      - bts-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bts -d bts"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: bts-redis
+    ports:
+      - "56379:6379"
+    volumes:
+      - bts-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  bts-postgres:
+  bts-redis:

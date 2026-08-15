@@ -3,11 +3,12 @@ import { zValidator } from "@hono/zod-validator";
 import { streamText } from "ai";
 import { z } from "zod";
 
-import { MODELS, NOVELIST_PERSONA, logGeneration } from "@behindthestory/ai";
+import { NOVELIST_PERSONA } from "@behindthestory/ai";
 import { proseStreamResponse } from "@behindthestory/core/prose-stream";
 import { buildSceneContext } from "@behindthestory/core/scene-context";
 
 import { assertNovel, requireAuth, type AuthEnv } from "#middleware/auth";
+import { openMeter } from "#lib/billing/meter";
 
 const INLINE_ACTIONS = {
   rewrite: {
@@ -87,7 +88,11 @@ export const aiWritingRoutes = new Hono<AuthEnv>()
       } = c.req.valid("json");
       await assertNovel(c.get("user").id, novelId);
 
-      const started = Date.now();
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "chapter",
+        novelId,
+      });
       let generationRoute = "chapter";
 
       return proseStreamResponse(
@@ -138,7 +143,8 @@ Join seamlessly at both edges. Do not repeat either surrounding passage. Output 
               : "Context ready",
           );
           const result = streamText({
-            model: MODELS.writing,
+            model: meter.model,
+            maxOutputTokens: meter.maxOutputTokens,
             abortSignal: c.req.raw.signal,
             instructions:
               NOVELIST_PERSONA +
@@ -149,15 +155,16 @@ Join seamlessly at both edges. Do not repeat either surrounding passage. Output 
         },
         {
           onFinish: (usage) =>
-            logGeneration({
-              novelId,
+            meter.settle({
+              usage,
+              generatedWords: usage.words,
               chapterId,
               route: generationRoute,
-              model: MODELS.writing,
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              durationMs: Date.now() - started,
             }),
+          // Fires however the stream ended. A no-op once settled; the case it
+          // exists for is the writer closing the tab mid-chapter, which would
+          // otherwise leave the reservation stranded until the sweeper runs.
+          onSettled: () => meter.release(),
         },
       );
     },
@@ -195,7 +202,11 @@ Join seamlessly at both edges. Do not repeat either surrounding passage. Output 
       } = c.req.valid("json");
       await assertNovel(c.get("user").id, novelId);
 
-      const started = Date.now();
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: `inline:${action}`,
+        novelId,
+      });
       return proseStreamResponse(
         async ({ status }) => {
           status("context", "Building story context");
@@ -221,7 +232,8 @@ Join seamlessly at both edges. Do not repeat either surrounding passage. Output 
               : "Context ready",
           );
           const result = streamText({
-            model: MODELS.writing,
+            model: meter.model,
+            maxOutputTokens: meter.maxOutputTokens,
             abortSignal: c.req.raw.signal,
             instructions:
               NOVELIST_PERSONA +
@@ -247,15 +259,8 @@ Task: ${INLINE_ACTIONS[action].directive}${instruction ? `\n\nAuthor's direction
         },
         {
           onFinish: (usage) =>
-            logGeneration({
-              novelId,
-              chapterId,
-              route: `inline:${action}`,
-              model: MODELS.writing,
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              durationMs: Date.now() - started,
-            }),
+            meter.settle({ usage, generatedWords: usage.words, chapterId }),
+          onSettled: () => meter.release(),
         },
       );
     },

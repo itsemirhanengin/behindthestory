@@ -6,6 +6,10 @@ import { sealCode } from "./sealed-code";
 export const QUEUE_NAMES = {
   chapterIndex: "chapter-index",
   signInEmail: "sign-in-email",
+  /** Releases reservations left behind by generations that never reported back. */
+  wordHolds: "word-holds",
+  /** Re-reads subscription state from the payment provider and fixes drift. */
+  billingReconcile: "billing-reconcile",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -22,9 +26,14 @@ export type SignInEmailJob = {
   expiresInMinutes: number;
 };
 
+/** Both schedules are periodic sweeps over everything; neither takes input. */
+export type ScheduledJob = Record<string, never>;
+
 export type JobPayloads = {
   "chapter-index": ChapterIndexJob;
   "sign-in-email": SignInEmailJob;
+  "word-holds": ScheduledJob;
+  "billing-reconcile": ScheduledJob;
 };
 
 const queues = new Map<QueueName, Queue>();
@@ -124,4 +133,50 @@ export async function enqueueSignInEmail(input: {
 export async function closeQueues() {
   await Promise.all([...queues.values()].map((q) => q.close()));
   queues.clear();
+}
+
+/**
+ * The recurring work.
+ *
+ * Registered from the worker on boot rather than declared in Railway, because
+ * `upsertJobScheduler` is idempotent by key: restarting or scaling the worker
+ * re-asserts the same two schedules instead of accumulating duplicates, and a
+ * changed interval takes effect on deploy with nothing to remember to update.
+ */
+export const SCHEDULES = {
+  /**
+   * Every five minutes. A hold that outlives its generation is allowance the
+   * writer cannot spend and cannot see, so the window between losing it and
+   * getting it back should be short enough that nobody notices.
+   */
+  wordHolds: { key: "word-holds-sweep", pattern: "*/5 * * * *" },
+  /**
+   * Nightly. Webhooks are the fast path and this is the safety net: Polar
+   * retries ten times and then drops an event silently, so without a periodic
+   * re-read a single unlucky delivery would leave a workspace on the wrong
+   * plan indefinitely.
+   */
+  billingReconcile: { key: "billing-reconcile-daily", pattern: "17 3 * * *" },
+} as const;
+
+export async function registerSchedules() {
+  await getQueue(QUEUE_NAMES.wordHolds).upsertJobScheduler(
+    SCHEDULES.wordHolds.key,
+    { pattern: SCHEDULES.wordHolds.pattern },
+    {
+      name: "sweep",
+      data: {},
+      opts: { removeOnComplete: true, removeOnFail: { count: 50 } },
+    },
+  );
+
+  await getQueue(QUEUE_NAMES.billingReconcile).upsertJobScheduler(
+    SCHEDULES.billingReconcile.key,
+    { pattern: SCHEDULES.billingReconcile.pattern },
+    {
+      name: "reconcile",
+      data: {},
+      opts: { removeOnComplete: true, removeOnFail: { count: 50 } },
+    },
+  );
 }

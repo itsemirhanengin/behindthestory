@@ -3,8 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "//": "`./models` is the pricing catalogue and imports nothing — the studio bundles it for the model picker and the cost hints, so it must not reach the database.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./models": "./src/models.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

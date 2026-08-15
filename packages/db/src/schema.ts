@@ -10,6 +10,7 @@ import {
   index,
   uniqueIndex,
   check,
+  numeric,
   vector,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -108,34 +109,104 @@ export const sessions = pgTable(
   ],
 );
 
-export const novels = pgTable("novels", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  /**
-   * The single ownership edge for the whole graph. Every other table reaches a
-   * novel through `novel_id`, so authorisation is one check here rather than a
-   * column on all thirteen tables.
-   *
-   * Nullable only to carry pre-auth rows across; a null owner is unreachable
-   * for every caller until `db:claim` assigns it.
-   */
-  ownerId: uuid("owner_id").references(() => users.id, {
-    onDelete: "cascade",
-  }),
-  title: text("title").notNull(),
-  premise: text("premise").notNull().default(""),
+/**
+ * The billing and tenancy subject.
+ *
+ * Everything that costs money — the plan, the word balance, the Polar customer
+ * — hangs off a workspace rather than a user, because a Team plan is a shared
+ * pool that several writers draw from. A solo writer never sees the concept:
+ * signing in creates a personal workspace and they are its only member.
+ */
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    /**
+     * Which model prose generations use. Null means "whatever the plan
+     * defaults to", which is also the only possibility on Free — that plan
+     * does not render a model picker.
+     */
+    defaultModel: text("default_model"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [uniqueIndex("workspaces_slug_idx").on(t.slug)],
+);
 
-  // --- Style profile: compiled into every AI prompt for this novel. ---------
-  genre: text("genre").notNull().default(""),
-  /** Freeform mood descriptors, e.g. "bleak, wry, slow-burn dread". */
-  tone: text("tone").notNull().default(""),
-  pov: text("pov", { enum: POV_VALUES }).notNull().default("third_limited"),
-  tense: text("tense", { enum: TENSE_VALUES }).notNull().default("past"),
-  targetChapterWords: integer("target_chapter_words").notNull().default(1800),
-  /** Prose rules, influences, things to avoid. Passed through verbatim. */
-  styleNotes: text("style_notes").notNull().default(""),
+export const WORKSPACE_ROLE_VALUES = ["owner", "admin", "member"] as const;
 
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+/**
+ * Who may act inside a workspace. `owner` is the billing contact and cannot be
+ * removed; `admin` may buy and cancel; `member` may only write.
+ */
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role", { enum: WORKSPACE_ROLE_VALUES })
+      .notNull()
+      .default("member"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("workspace_members_unique_idx").on(t.workspaceId, t.userId),
+    index("workspace_members_user_idx").on(t.userId),
+  ],
+);
+
+export const novels = pgTable(
+  "novels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /**
+     * The single authorisation edge for the whole graph. Every other table
+     * reaches a novel through `novel_id`, so "may this account touch this
+     * data" is one check here rather than a column on all thirteen tables.
+     *
+     * This used to be `owner_id`. Moving it to the workspace is what makes a
+     * shared plan possible: two writers on the same Team see the same novels
+     * without anything else in the graph changing.
+     *
+     * Nullable only to carry rows across the migration; a null workspace is
+     * unreachable for every caller until the backfill assigns it.
+     */
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    /**
+     * Who created it. No longer load-bearing for authorisation — kept because
+     * attribution inside a shared workspace is worth having. Nulled rather
+     * than cascaded when an account goes away: in a shared workspace one
+     * member leaving must not take the team's novels with them.
+     */
+    ownerId: uuid("owner_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    premise: text("premise").notNull().default(""),
+
+    // --- Style profile: compiled into every AI prompt for this novel. -------
+    genre: text("genre").notNull().default(""),
+    /** Freeform mood descriptors, e.g. "bleak, wry, slow-burn dread". */
+    tone: text("tone").notNull().default(""),
+    pov: text("pov", { enum: POV_VALUES }).notNull().default("third_limited"),
+    tense: text("tense", { enum: TENSE_VALUES }).notNull().default("past"),
+    targetChapterWords: integer("target_chapter_words").notNull().default(1800),
+    /** Prose rules, influences, things to avoid. Passed through verbatim. */
+    styleNotes: text("style_notes").notNull().default(""),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("novels_workspace_idx").on(t.workspaceId)],
+);
 
 export const characters = pgTable(
   "characters",
@@ -546,14 +617,31 @@ export const canonChunks = pgTable(
   ],
 );
 
-/** Usage log for every AI call, so generation cost is visible rather than magic. */
+export const USAGE_SOURCE_VALUES = ["platform", "byok"] as const;
+
+/**
+ * Usage log for every AI call, so generation cost is visible rather than magic.
+ *
+ * This started as analytics and is now also the evidence behind a bill, which
+ * changed two things about it. `novel_id` no longer cascades: deleting a novel
+ * used to erase what its generations cost, which is fine for a usage panel and
+ * unacceptable for a record of what somebody was charged. And every row now
+ * carries the workspace, so per-account totals are a scan of one index rather
+ * than a join through a nullable owner.
+ */
 export const aiGenerations = pgTable(
   "ai_generations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    novelId: uuid("novel_id")
-      .notNull()
-      .references(() => novels.id, { onDelete: "cascade" }),
+    /** Who pays. Nullable only so the column could be added ahead of backfill. */
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    /** Who asked. Attribution inside a shared workspace; not an authorisation edge. */
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    novelId: uuid("novel_id").references(() => novels.id, {
+      onDelete: "set null",
+    }),
     chapterId: uuid("chapter_id").references(() => chapters.id, {
       onDelete: "set null",
     }),
@@ -562,10 +650,177 @@ export const aiGenerations = pgTable(
     model: text("model").notNull(),
     inputTokens: integer("input_tokens").notNull().default(0),
     outputTokens: integer("output_tokens").notNull().default(0),
+    /** Subset of `input_tokens` served from the provider's cache. */
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    /** Subset of `input_tokens` written to it, which some providers surcharge. */
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    /** Subset of `output_tokens`. Recorded for visibility, never billed twice. */
+    reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    /** What the provider charged us, in USD. Six decimals holds a $0.000001 call. */
+    usdCost: numeric("usd_cost", { precision: 12, scale: 6 }).notNull().default("0"),
+    /** What the workspace was charged, in words. */
+    wordsCharged: integer("words_charged").notNull().default(0),
+    /** Reserved for bring-your-own-key, which does not draw down the allowance. */
+    source: text("source", { enum: USAGE_SOURCE_VALUES })
+      .notNull()
+      .default("platform"),
+    /**
+     * The caller's idempotency key, shared with the ledger rows for the same
+     * generation. Unique so a retried settle cannot bill twice.
+     */
+    requestId: text("request_id"),
     durationMs: integer("duration_ms").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [index("ai_generations_novel_idx").on(t.novelId)],
+  (t) => [
+    index("ai_generations_novel_idx").on(t.novelId),
+    index("ai_generations_workspace_idx").on(t.workspaceId, t.createdAt),
+    uniqueIndex("ai_generations_request_idx").on(t.requestId),
+  ],
+);
+
+/**
+ * The spendable balance, kept as two counters rather than a pile of grants.
+ *
+ * Plan words reset at each billing period; top-up words never do. Because the
+ * spend order is fixed — plan first, then top-ups — a debit needs no
+ * allocation pass over grant rows, which is what lets it be the single
+ * conditional UPDATE that makes concurrent generations safe without a lock.
+ */
+export const workspaceBalances = pgTable("workspace_balances", {
+  workspaceId: uuid("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  planSlug: text("plan_slug").notNull().default("free"),
+  planWordsRemaining: integer("plan_words_remaining").notNull().default(0),
+  topupWordsRemaining: integer("topup_words_remaining").notNull().default(0),
+  /** Reserved by generations that have started but not finished. */
+  wordsHeld: integer("words_held").notNull().default(0),
+  periodStart: timestamp("period_start").notNull().defaultNow(),
+  periodEnd: timestamp("period_end"),
+  updatedAt: updatedAtColumn(),
+});
+
+/**
+ * Who the payment provider thinks this workspace is.
+ *
+ * `provider` is a column rather than an assumption because the marketplace
+ * this product wants eventually cannot run on Polar — their acceptable-use
+ * policy prohibits selling other people's work through your account — so a
+ * second provider alongside this one is a matter of when, not if.
+ */
+export const billingCustomers = pgTable("billing_customers", {
+  workspaceId: uuid("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("polar"),
+  /** Their id for our workspace. We are their `external_id` in return. */
+  providerCustomerId: text("provider_customer_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: updatedAtColumn(),
+});
+
+/**
+ * The subscription as the provider last described it.
+ *
+ * A cache, not a source of truth — the provider is. It exists so that reading
+ * a workspace's plan is a local query rather than a network call on the path
+ * of every generation.
+ */
+export const billingSubscriptions = pgTable("billing_subscriptions", {
+  workspaceId: uuid("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("polar"),
+  providerSubscriptionId: text("provider_subscription_id").notNull(),
+  providerProductId: text("provider_product_id").notNull().default(""),
+  planSlug: text("plan_slug").notNull(),
+  /** Verbatim from the provider; interpreted by the billing layer, not here. */
+  status: text("status").notNull(),
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  updatedAt: updatedAtColumn(),
+});
+
+/**
+ * Webhook deliveries already seen, keyed by the provider's own event id.
+ *
+ * Polar retries up to ten times and guarantees no ordering, so the same event
+ * arriving twice is routine rather than exceptional. The balance movements are
+ * separately idempotent; this stops the cheaper work from repeating too, and
+ * gives support something to point at when asked whether an event arrived.
+ */
+export const billingWebhookEvents = pgTable("billing_webhook_events", {
+  /** The `webhook-id` header — stable across every retry of one event. */
+  id: text("id").primaryKey(),
+  provider: text("provider").notNull().default("polar"),
+  type: text("type").notNull(),
+  receivedAt: timestamp("received_at").notNull().defaultNow(),
+});
+
+export const WORD_LEDGER_REASONS = [
+  "grant",
+  "hold",
+  "settle",
+  "release",
+  "expire",
+  "refund",
+] as const;
+
+/**
+ * Append-only record of every movement, for support and reconciliation.
+ *
+ * The balance above is the authority on what can be spent; this is the audit
+ * trail explaining how it got there. Keeping them separate is deliberate — a
+ * ledger you have to sum to answer "can this generation run" is a ledger you
+ * end up caching, and then the cache is the real balance anyway.
+ */
+export const wordLedger = pgTable(
+  "word_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    /** Negative debits, positive credits. `plan_delta + topup_delta`. */
+    delta: integer("delta").notNull(),
+    /**
+     * How the movement split across the two counters.
+     *
+     * Recorded because a release has to put words back where they came from.
+     * Refunding a top-up-funded hold into the plan counter would quietly
+     * convert words somebody paid for outright into words that expire at the
+     * end of the month.
+     */
+    planDelta: integer("plan_delta").notNull().default(0),
+    topupDelta: integer("topup_delta").notNull().default(0),
+    reason: text("reason", { enum: WORD_LEDGER_REASONS }).notNull(),
+    /**
+     * Stable per logical operation: a generation's hold and settle share one,
+     * and a Polar order uses `polar_order:<id>`. Combined with the unique index
+     * below this is what makes a redelivered webhook a no-op.
+     */
+    requestId: text("request_id").notNull(),
+    generationId: uuid("generation_id").references(() => aiGenerations.id, {
+      onDelete: "set null",
+    }),
+    note: text("note").notNull().default(""),
+    planWordsAfter: integer("plan_words_after").notNull().default(0),
+    topupWordsAfter: integer("topup_words_after").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("word_ledger_idempotency_idx").on(
+      t.workspaceId,
+      t.requestId,
+      t.reason,
+    ),
+    index("word_ledger_workspace_idx").on(t.workspaceId, t.createdAt),
+    // Drives the sweep that releases holds abandoned by a dropped connection.
+    index("word_ledger_reason_idx").on(t.reason, t.createdAt),
+  ],
 );
 
 /**
@@ -623,3 +878,12 @@ export type ChapterRevision = typeof chapterRevisions.$inferSelect;
 export type CanonChunk = typeof canonChunks.$inferSelect;
 export type AiGeneration = typeof aiGenerations.$inferSelect;
 export type AiSuggestionFeedback = typeof aiSuggestionFeedback.$inferSelect;
+export type Workspace = typeof workspaces.$inferSelect;
+export type WorkspaceMember = typeof workspaceMembers.$inferSelect;
+export type WorkspaceRole = (typeof WORKSPACE_ROLE_VALUES)[number];
+export type WorkspaceBalance = typeof workspaceBalances.$inferSelect;
+export type WordLedgerEntry = typeof wordLedger.$inferSelect;
+export type WordLedgerReason = (typeof WORD_LEDGER_REASONS)[number];
+export type UsageSource = (typeof USAGE_SOURCE_VALUES)[number];
+export type BillingCustomer = typeof billingCustomers.$inferSelect;
+export type BillingSubscription = typeof billingSubscriptions.$inferSelect;

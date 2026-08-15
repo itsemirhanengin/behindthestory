@@ -12,7 +12,7 @@ import {
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ProsePhase, ProseUsage } from "@behindthestory/core/prose-stream";
+import type { ProsePhase, ProseWireUsage } from "@behindthestory/core/prose-stream";
 
 export type AiSuggestion = {
   id: string;
@@ -23,7 +23,7 @@ export type AiSuggestion = {
   text: string;
   error?: string;
   startedAt: number;
-  usage?: ProseUsage;
+  usage?: ProseWireUsage;
 };
 
 const PHASE_LABELS: Record<AiSuggestion["phase"], string> = {

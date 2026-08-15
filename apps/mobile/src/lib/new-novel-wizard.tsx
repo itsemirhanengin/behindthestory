@@ -5,7 +5,6 @@ import type {
   StyleFields,
   StyleProposal,
   WizardTurn,
-  WizardUsage,
 } from '@behindthestory/core/onboarding';
 
 import { useAiOnboardingReading, useAiOnboardingStyle } from '@/lib/queries/ai-onboarding';
@@ -70,7 +69,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   /** Which reading revision the current style was derived from. */
   const [styleFrom, setStyleFrom] = useState(-1);
 
-  const [usage, setUsage] = useState<WizardUsage[]>([]);
   const [creating, setCreating] = useState(false);
 
   // Refs rather than the busy flags: screens kick these off on mount, and a
@@ -99,7 +97,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         });
         setReading(res.reading);
         setReadingRevision((r) => r + 1);
-        setUsage((u) => [...u, res.usage]);
         // An untitled novel gets named here, which is also why the title stays
         // editable on the alignment step rather than only on the first one.
         if (!title.trim() && res.reading.titleSuggestions[0]) {
@@ -146,7 +143,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         styleNotes: res.style.styleNotes,
       });
       setStyleFrom(derivedFrom);
-      setUsage((u) => [...u, res.usage]);
     } catch (e) {
       setStyleError((e as Error).message);
     } finally {
@@ -163,12 +159,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         title: title.trim(),
         premise: reading.premise,
         ...style,
-        aiUsage: usage,
       });
     } finally {
       setCreating(false);
     }
-  }, [reading, style, title, usage, createNovel]);
+  }, [reading, style, title, createNovel]);
 
   const value: Wizard = {
     title,

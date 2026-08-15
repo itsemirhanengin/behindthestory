@@ -39,7 +39,6 @@ import {
   type StyleRequest,
   type StyleResponse,
   type WizardTurn,
-  type WizardUsage,
 } from "@behindthestory/core/onboarding";
 import type { Novel } from "@/lib/queries/types";
 import { PremiseStep } from "./premise-step";
@@ -107,7 +106,6 @@ export function NewNovelWizard() {
   /** Which reading revision the current style was derived from. */
   const [styleFrom, setStyleFrom] = useState(-1);
 
-  const [usage, setUsage] = useState<WizardUsage[]>([]);
   const [creating, setCreating] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
 
@@ -131,7 +129,6 @@ export function NewNovelWizard() {
         const res = (await readNovel.mutateAsync(body)) as ReadingResponse;
         setReading(res.reading);
         setReadingRevision((r) => r + 1);
-        setUsage((u) => [...u, res.usage]);
         // An untitled novel gets named here, which is also why the title stays
         // editable on the alignment step rather than only on step one.
         if (!title.trim() && res.reading.titleSuggestions[0]) {
@@ -184,7 +181,6 @@ export function NewNovelWizard() {
         styleNotes: res.style.styleNotes,
       });
       setStyleFrom(derivedFrom);
-      setUsage((u) => [...u, res.usage]);
     } catch (e) {
       const message = (e as Error).message;
       setStyleError(message);
@@ -243,7 +239,6 @@ export function NewNovelWizard() {
         title: title.trim(),
         premise: reading.premise,
         ...style,
-        aiUsage: usage,
       });
       toast.success(`“${novel.title}” is ready`);
       router.push(`/novels/${novel.id}/bible`);
@@ -251,7 +246,7 @@ export function NewNovelWizard() {
       toast.error((e as Error).message);
       setCreating(false);
     }
-  }, [reading, style, creating, title, usage, router]);
+  }, [reading, style, creating, title, router]);
 
   // Keeps ⌘↵ bound to one listener instead of resubscribing on every render.
   const advanceRef = useRef(() => {});

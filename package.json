@@ -7,9 +7,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "turbo dev",
     "build": "turbo build",
+    "db:generate": "pnpm --filter @behindthestory/db db:generate",
+    "db:migrate": "pnpm --filter @behindthestory/db db:migrate",
+    "db:reset": "pnpm --filter @behindthestory/db db:reset",
+    "dev": "turbo dev",
+    "dev:down": "docker compose down",
+    "dev:reset": "docker compose down -v && docker compose up -d --wait && pnpm db:reset",
+    "dev:up": "docker compose up -d --wait",
     "lint": "turbo lint",
+    "test": "turbo test",
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {

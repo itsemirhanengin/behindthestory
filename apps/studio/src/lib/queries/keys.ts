@@ -10,6 +10,10 @@
 export const keys = {
   session: ["session"] as const,
 
+  workspaces: ["workspaces"] as const,
+  billingCatalogue: ["billing", "catalogue"] as const,
+  billing: (workspaceId: string) => ["billing", workspaceId] as const,
+
   novels: ["novels"] as const,
   novel: (novelId: string) => ["novels", novelId] as const,
 

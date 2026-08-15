@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { POV_VALUES, TENSE_VALUES, getDb, novels } from "@behindthestory/db";
-import { MODELS, NOVELIST_PERSONA, logGeneration } from "@behindthestory/ai";
+import { NOVELIST_PERSONA } from "@behindthestory/ai";
 import {
   buildStoryContext,
   loadNovelBundle,
@@ -14,6 +14,7 @@ import {
 import { buildSceneContext } from "@behindthestory/core/scene-context";
 
 import { assertNovel, requireAuth, type AuthEnv } from "#middleware/auth";
+import { openMeter } from "#lib/billing/meter";
 
 const selectionFields = {
   selectedCharacterIds: z.array(z.uuid()).default([]),
@@ -147,24 +148,22 @@ export const aiCraftRoutes = new Hono<AuthEnv>()
           )}`
         : `Invent a brand-new character that would enrich this story. They must not duplicate an existing character.`;
 
-      const started = Date.now();
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "character",
+        novelId,
+      });
       const { output, usage } = await generateText({
-        model: MODELS.writing,
+        model: meter.model,
+        maxOutputTokens: meter.maxOutputTokens,
         instructions:
           NOVELIST_PERSONA +
           ` The voice and speechSample fields matter most: they are what stops every character in this novel sounding like the same narrator. Make them specific and distinguishable from the existing cast.`,
         output: Output.object({ schema: characterSchema }),
         prompt: `${context.text}\n\n---\nTask: ${task}${hint ? `\nAuthor's direction: ${hint}` : ""}`,
-      });
+      }).catch(meter.abort);
 
-      await logGeneration({
-        novelId,
-        route: "character",
-        model: MODELS.writing,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        durationMs: Date.now() - started,
-      });
+      await meter.settle({ usage });
 
       return c.json(output);
     },
@@ -200,22 +199,20 @@ export const aiCraftRoutes = new Hono<AuthEnv>()
           )}`
         : `Invent a new location that fits this story and would be a compelling setting for future scenes.`;
 
-      const started = Date.now();
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "location",
+        novelId,
+      });
       const { output, usage } = await generateText({
-        model: MODELS.writing,
+        model: meter.model,
+        maxOutputTokens: meter.maxOutputTokens,
         instructions: NOVELIST_PERSONA,
         output: Output.object({ schema: locationSchema }),
         prompt: `${context.text}\n\n---\nTask: ${task}${hint ? `\nAuthor's direction: ${hint}` : ""}`,
-      });
+      }).catch(meter.abort);
 
-      await logGeneration({
-        novelId,
-        route: "location",
-        model: MODELS.writing,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        durationMs: Date.now() - started,
-      });
+      await meter.settle({ usage });
 
       return c.json(output);
     },
@@ -236,24 +233,22 @@ export const aiCraftRoutes = new Hono<AuthEnv>()
       );
     }
 
-    const started = Date.now();
+    const meter = await openMeter({
+      userId: c.get("user").id,
+      route: "style",
+      novelId,
+    });
     const { output, usage } = await generateText({
-      model: MODELS.writing,
+      model: meter.model,
+      maxOutputTokens: meter.maxOutputTokens,
       instructions:
         NOVELIST_PERSONA +
         ` You are advising on the house style for a new novel. Be opinionated and specific — a style profile that would fit any book is useless.`,
       output: Output.object({ schema: styleSchema }),
       prompt: `# Novel: ${novel.title}\nPremise: ${novel.premise}\n\n---\nTask: Propose the style profile this novel should be written in.`,
-    });
+    }).catch(meter.abort);
 
-    await logGeneration({
-      novelId,
-      route: "style",
-      model: MODELS.writing,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      durationMs: Date.now() - started,
-    });
+    await meter.settle({ usage });
 
     return c.json({
       ...output,
@@ -291,9 +286,14 @@ export const aiCraftRoutes = new Hono<AuthEnv>()
       });
       if (!chapter) throw new HTTPException(404, { message: "Chapter not found" });
 
-      const started = Date.now();
+      const meter = await openMeter({
+        userId: c.get("user").id,
+        route: "outline",
+        novelId,
+      });
       const { output, usage } = await generateText({
-        model: MODELS.writing,
+        model: meter.model,
+        maxOutputTokens: meter.maxOutputTokens,
         instructions:
           NOVELIST_PERSONA +
           ` You are planning a chapter, not writing it. Beats must be concrete and dramatic — a thing that happens, not a theme. Advance at least one open thread from the story memory, and set up or pay off something. Respect the target chapter length when deciding how many beats fit.`,
@@ -302,17 +302,9 @@ export const aiCraftRoutes = new Hono<AuthEnv>()
 
 ---
 Task: Plan Chapter ${chapter.number}${chapter.title && chapter.title !== `Chapter ${chapter.number}` ? ` ("${chapter.title}")` : ""}.${instruction ? `\n\nAuthor's direction: ${instruction}` : ""}`,
-      });
+      }).catch(meter.abort);
 
-      await logGeneration({
-        novelId,
-        chapterId,
-        route: "outline",
-        model: MODELS.writing,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        durationMs: Date.now() - started,
-      });
+      await meter.settle({ usage, chapterId });
 
       return c.json(output);
     },

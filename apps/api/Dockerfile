@@ -47,6 +47,11 @@ COPY --from=build --chown=node:node /out/node_modules ./node_modules
 COPY --from=build --chown=node:node /out/dist ./dist
 COPY --from=build --chown=node:node /out/package.json ./package.json
 
+# esbuild inlines code, not data. The generated migration SQL has to be copied
+# in separately, or the boot-time migrate fails looking for meta/_journal.json.
+# `DB_MIGRATIONS_DIR` defaults to this path.
+COPY --from=build --chown=node:node /app/packages/db/migrations ./migrations
+
 EXPOSE 3001
 
 # Exec form, no shell wrapper: the process must be PID 1 so that the SIGTERM

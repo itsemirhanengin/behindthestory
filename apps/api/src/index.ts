@@ -1,8 +1,19 @@
 import { serve } from "@hono/node-server";
 
+import { runMigrations } from "@behindthestory/db/migrate";
+
 import { app } from "#app";
 
 const port = Number(process.env.PORT ?? 3001);
+
+/**
+ * Migrate before accepting traffic. The alternative — a separate deploy step —
+ * leaves a window where a rolled-out container talks to a schema it predates,
+ * and the billing tables are the last place to discover that.
+ *
+ * Concurrent replicas are handled inside `runMigrations` with an advisory lock.
+ */
+await runMigrations();
 
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`[api] listening on http://localhost:${info.port}`);

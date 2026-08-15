@@ -9,9 +9,35 @@ export type ProseStreamEvent =
   | { t: "d"; v: string }
   | { t: "e"; v: string }
   | { t: "s"; v: ProsePhase; detail?: string }
-  | { t: "f"; inputTokens: number; outputTokens: number };
+  | { t: "f"; inputTokens: number; outputTokens: number; words: number };
 
-export type ProseUsage = { inputTokens: number; outputTokens: number };
+/**
+ * What the generation cost and produced.
+ *
+ * The cache and reasoning counts are subsets of the input and output totals
+ * respectively — they price the call, they do not add to it. `words` is what
+ * the writer is charged for, counted from the deltas as they stream rather
+ * than re-derived afterwards from text nobody kept.
+ */
+export type ProseUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  words: number;
+};
+
+/**
+ * What the client is told. The cost breakdown — cache reads, cache writes,
+ * reasoning — stays server-side: it prices the call, and nothing in the UI is
+ * better for knowing it.
+ */
+export type ProseWireUsage = Pick<
+  ProseUsage,
+  "inputTokens" | "outputTokens" | "words"
+>;
+
 export type ProsePhase = "context" | "model" | "writing";
 
 type ProseStreamSource =
@@ -42,12 +68,26 @@ function describeError(error: unknown): string {
 
 export function proseStreamResponse(
   source: ProseStreamSource,
-  opts: { onFinish?: (usage: ProseUsage) => void | Promise<void> } = {},
+  opts: {
+    onFinish?: (usage: ProseUsage) => void | Promise<void>;
+    /**
+     * Runs once the stream is over however it ended — finished, errored, or
+     * abandoned when the writer closed the tab. Billing hangs a hold release
+     * off this: without it, a generation the client walked away from keeps its
+     * words reserved until the sweeper notices, and the writer sees an
+     * allowance that quietly shrank for no visible reason.
+     */
+    onSettled?: (outcome: { finished: boolean }) => void | Promise<void>;
+  } = {},
 ): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let open = true;
+      let finished = false;
+      let words = 0;
+      /** Deltas split words mid-token, so the tail is carried to the next one. */
+      let pending = "";
       const send = (event: ProseStreamEvent) => {
         if (!open) return;
         try {
@@ -68,16 +108,40 @@ export function proseStreamResponse(
               writing = true;
               status("writing");
             }
+            // Count as we go. Buffering the whole chapter only to split it
+            // once at the end doubles peak memory for a number we can
+            // accumulate for free.
+            const chunk = pending + part.text;
+            const parts = chunk.split(/\s+/);
+            pending = parts.pop() ?? "";
+            words += parts.filter(Boolean).length;
+
             send({ t: "d", v: part.text });
           } else if (part.type === "error") {
             console.error("[ai] stream error", part.error);
             send({ t: "e", v: describeError(part.error) });
           } else if (part.type === "finish") {
+            if (pending.trim()) words += 1;
+            pending = "";
+
             const usage: ProseUsage = {
               inputTokens: part.totalUsage.inputTokens ?? 0,
               outputTokens: part.totalUsage.outputTokens ?? 0,
+              cacheReadTokens:
+                part.totalUsage.inputTokenDetails?.cacheReadTokens ?? 0,
+              cacheWriteTokens:
+                part.totalUsage.inputTokenDetails?.cacheWriteTokens ?? 0,
+              reasoningTokens:
+                part.totalUsage.outputTokenDetails?.reasoningTokens ?? 0,
+              words,
             };
-            send({ t: "f", ...usage });
+            finished = true;
+            send({
+              t: "f",
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              words: usage.words,
+            });
             await opts.onFinish?.(usage);
           }
         }
@@ -85,6 +149,14 @@ export function proseStreamResponse(
         console.error("[ai] stream aborted", error);
         send({ t: "e", v: describeError(error) });
       } finally {
+        // Before closing, so a slow release still runs on a client that hung
+        // up — `open` is already false there, but this hook is not about the
+        // socket.
+        try {
+          await opts.onSettled?.({ finished });
+        } catch (error) {
+          console.error("[ai] stream settle failed", error);
+        }
         if (open) controller.close();
       }
     },
@@ -108,17 +180,43 @@ export function proseStreamResponse(
  * Reads a prose stream, invoking `onDelta` per chunk. Throws if the server
  * reported an error or if the stream closed without producing any text.
  */
+/**
+ * A stream that failed before it started.
+ *
+ * Carries the status and the machine-readable code because one of these — an
+ * exhausted word balance — is a failure the UI can offer a way out of, and
+ * matching on the wording of a message to detect it would break the first time
+ * someone rephrased it.
+ */
+export class ProseStreamError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "ProseStreamError";
+  }
+}
+
 export async function consumeProseStream(
   res: Response,
   handlers: {
     onDelta: (text: string) => void;
     onStatus?: (phase: ProsePhase, detail?: string) => void;
-    onUsage?: (usage: ProseUsage) => void;
+    onUsage?: (usage: ProseWireUsage) => void;
   },
 ): Promise<void> {
   if (!res.ok || !res.body) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `AI request failed (${res.status})`);
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+    };
+    throw new ProseStreamError(
+      body.error ?? `AI request failed (${res.status})`,
+      res.status,
+      body.code,
+    );
   }
 
   const reader = res.body.getReader();
@@ -147,6 +245,7 @@ export async function consumeProseStream(
       handlers.onUsage?.({
         inputTokens: event.inputTokens,
         outputTokens: event.outputTokens,
+        words: event.words,
       });
     }
   };
