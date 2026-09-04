@@ -56,6 +56,23 @@ export class ProviderPermissionError extends Error {
 }
 
 /**
+ * The plan cannot change because the subscription is on its way out.
+ *
+ * Polar refuses any product change once a cancellation is scheduled, which is
+ * reasonable — the plan it would change to is one nobody will be billed for.
+ * It is also not an error in any sense the writer caused: the answer is to
+ * keep the subscription first, and then change it.
+ */
+export class SubscriptionCanceledError extends Error {
+  constructor() {
+    super(
+      "This subscription is set to end, so its plan cannot be changed. Keep the plan first, then change it.",
+    );
+    this.name = "SubscriptionCanceledError";
+  }
+}
+
+/**
  * Digs a 403 out of whatever the SDK threw.
  *
  * Not an `instanceof` check on an SDK error class, because the SDK does not
@@ -64,6 +81,19 @@ export class ProviderPermissionError extends Error {
  * failure with the real status buried in `cause`. Walking the chain for a
  * status and a scope is what survives that.
  */
+/**
+ * Where the provider's own words might be, on any of the error shapes the SDK
+ * throws.
+ *
+ * Two were observed for the very same call: a typed `AlreadyCanceledSubscription`
+ * whose reason is in `name`, `error` and `detail`, and a
+ * `ResponseValidationError` whose `message` is only "Response validation
+ * failed" and whose reason is in `body` — with `body$` appearing on a third
+ * shape. Naming one field and hoping is how this silently stopped working, so
+ * read all of them and let the answer be found wherever it is.
+ */
+const REASON_FIELDS = ["body", "body$", "message", "detail", "error", "name"] as const;
+
 function failureDetail(
   error: unknown,
   depth = 0,
@@ -72,36 +102,52 @@ function failureDetail(
     return { status: null, text: "" };
   }
 
-  const candidate = error as {
-    status?: number;
+  const candidate = error as Record<string, unknown> & {
     rawResponse?: { status?: number; headers?: { get?: (n: string) => string | null } };
-    body$?: string;
-    message?: string;
     cause?: unknown;
   };
 
-  const status = candidate.status ?? candidate.rawResponse?.status ?? null;
-  const text = `${candidate.body$ ?? ""} ${candidate.message ?? ""} ${
-    candidate.rawResponse?.headers?.get?.("www-authenticate") ?? ""
-  }`;
+  const status =
+    [candidate.statusCode, candidate.status, candidate.rawResponse?.status].find(
+      (value): value is number => typeof value === "number",
+    ) ?? null;
 
-  if (status !== null) return { status, text };
+  const parts = REASON_FIELDS.map((field) =>
+    typeof candidate[field] === "string" ? (candidate[field] as string) : "",
+  );
+  parts.push(candidate.rawResponse?.headers?.get?.("www-authenticate") ?? "");
 
+  /* Always walk the whole chain, even once a status is in hand: the SDK's
+     wrapper carries the status while the reason can sit in the `cause` below
+     it. */
   const deeper = failureDetail(candidate.cause, depth + 1);
-  return { status: deeper.status, text: `${text} ${deeper.text}` };
+  return {
+    status: status ?? deeper.status,
+    text: `${parts.join(" ")} ${deeper.text}`,
+  };
 }
 
-function permissionScope(error: unknown, fallback: string): string | null {
-  const { status, text } = failureDetail(error);
-  if (status !== 403 && !text.includes("insufficient_scope")) return null;
-  // The header states the scope it wanted; fall back to the caller's guess.
-  return /scope="([^"]+)"/.exec(text)?.[1] ?? fallback;
-}
+/**
+ * Re-throws a provider refusal as something a person can act on.
+ *
+ * The status alone is not the diagnosis, which is what the first version of
+ * this got wrong. Polar answers 403 for a missing scope *and* for
+ * `AlreadyCanceledSubscription`, so keying off the code alone told a writer
+ * whose subscription was simply pending cancellation to go and edit an API
+ * token. Only the words `insufficient_scope` mean a scope problem.
+ */
+function rethrowProviderFailure(error: unknown, fallbackScope: string): never {
+  const { text } = failureDetail(error);
 
-/** Re-throws a provider refusal as something a person can act on. */
-function rethrowPermission(error: unknown, fallbackScope: string): never {
-  const scope = permissionScope(error, fallbackScope);
-  if (scope) throw new ProviderPermissionError(scope);
+  if (text.includes("insufficient_scope")) {
+    // The header states the scope it wanted; fall back to the caller's guess.
+    throw new ProviderPermissionError(/scope="([^"]+)"/.exec(text)?.[1] ?? fallbackScope);
+  }
+
+  if (text.includes("AlreadyCanceledSubscription")) {
+    throw new SubscriptionCanceledError();
+  }
+
   throw error;
 }
 
@@ -313,7 +359,7 @@ export const polarProvider: BillingProvider = {
         },
       });
     } catch (error) {
-      rethrowPermission(error, "subscriptions:write");
+      rethrowProviderFailure(error, "subscriptions:write");
     }
   },
 
@@ -321,7 +367,27 @@ export const polarProvider: BillingProvider = {
     try {
       await polar().subscriptions.revoke({ id: subscriptionId });
     } catch (error) {
-      rethrowPermission(error, "subscriptions:write");
+      rethrowProviderFailure(error, "subscriptions:write");
+    }
+  },
+
+  /**
+   * Calls off a cancellation that has not taken effect yet.
+   *
+   * Cancelling itself stays in the provider's portal — it owns the flow, the
+   * receipt and the wording — but coming back has to be possible from here.
+   * Somebody who cancelled and thought better of it should not have to find
+   * their way through a billing portal to undo it, and the portal is where
+   * they just were when they changed their mind.
+   */
+  async resumeSubscription(subscriptionId: string) {
+    try {
+      await polar().subscriptions.update({
+        id: subscriptionId,
+        subscriptionUpdate: { cancelAtPeriodEnd: false },
+      });
+    } catch (error) {
+      rethrowProviderFailure(error, "subscriptions:write");
     }
   },
 
@@ -334,7 +400,7 @@ export const polarProvider: BillingProvider = {
       // 404 means that, and anything else has to be loud — a refund silently
       // skipped is a plan nobody is paying for.
       if (failureDetail(error).status === 404) return null;
-      rethrowPermission(error, "orders:read");
+      rethrowProviderFailure(error, "orders:read");
     }
 
     return {
@@ -375,7 +441,7 @@ export const polarProvider: BillingProvider = {
        * known plan in place, which is the safe direction.
        */
       if (failureDetail(error).status === 404) return null;
-      rethrowPermission(error, "customers:read");
+      rethrowProviderFailure(error, "customers:read");
     }
 
     await rememberCustomer(workspaceId, state.id);

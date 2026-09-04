@@ -30,6 +30,8 @@ import {
   NoSubscriptionError,
   polarProvider,
   ProviderPermissionError,
+  resumeWorkspaceSubscription,
+  SubscriptionCanceledError,
   syncWorkspaceFromProvider,
   WebhookVerificationError,
 } from "@behindthestory/core/billing";
@@ -52,6 +54,32 @@ const checkoutSchema = z.object({
 });
 
 const planChangeSchema = z.object({ plan: z.enum(PAID_PLANS) });
+
+/**
+ * Turns the billing layer's refusals into answers a client can act on.
+ *
+ * Each of these is a legitimate state rather than a fault, and each used to
+ * arrive as a bare 500 — which in the studio reads as "the app is broken"
+ * exactly when the writer is trying to give us money.
+ */
+function asHttpError(error: unknown): HTTPException {
+  // Nothing to change means nothing is wrong — they have to buy one first.
+  if (error instanceof NoSubscriptionError) {
+    return new HTTPException(409, { message: error.message });
+  }
+  // A dead end until the cancellation is called off, which the studio offers.
+  if (error instanceof SubscriptionCanceledError) {
+    return new HTTPException(409, { message: error.message });
+  }
+  /* A deployment problem, not a bug: say which scope is missing rather than
+     answering "Internal error" to somebody clicking Upgrade. 503 because the
+     request was sound and the service cannot serve it yet. */
+  if (error instanceof ProviderPermissionError) {
+    console.error("[billing] Polar refused the request:", error.message);
+    return new HTTPException(503, { message: error.message });
+  }
+  throw error;
+}
 
 /**
  * Everything that touches money.
@@ -255,18 +283,25 @@ export const billingRoutes = new Hono<AuthEnv>()
         }),
       );
     } catch (error) {
-      // Nothing to change means nothing is wrong — they have to buy one first.
-      if (error instanceof NoSubscriptionError) {
-        throw new HTTPException(409, { message: error.message });
-      }
-      /* A deployment problem, not a bug: say which scope is missing rather
-         than answering "Internal error" to somebody clicking Upgrade. 503
-         because the request was sound and the service cannot serve it yet. */
-      if (error instanceof ProviderPermissionError) {
-        console.error("[billing] Polar refused a plan change:", error.message);
-        throw new HTTPException(503, { message: error.message });
-      }
-      throw error;
+      throw asHttpError(error);
+    }
+  })
+  /**
+   * Calls off a cancellation the writer has changed their mind about.
+   *
+   * Separate from the plan endpoint because it is not a plan change — the plan
+   * is already theirs; what moves is whether it survives the period boundary.
+   * The provider refuses plan changes while a cancellation is pending, so this
+   * is also the door that has to be opened before that endpoint works again.
+   */
+  .post("/:workspaceId/resume", async (c) => {
+    const workspaceId = c.req.param("workspaceId");
+    await assertWorkspaceAdmin(c.get("user").id, workspaceId);
+
+    try {
+      return c.json(await resumeWorkspaceSubscription(provider, workspaceId));
+    } catch (error) {
+      throw asHttpError(error);
     }
   })
   .post("/:workspaceId/checkout", zValidator("json", checkoutSchema), async (c) => {

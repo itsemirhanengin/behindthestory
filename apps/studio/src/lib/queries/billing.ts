@@ -132,7 +132,18 @@ export function useSyncBilling(workspaceId: string | undefined) {
   });
 }
 
+/**
+ * Fetches a portal link. Deliberately does not navigate.
+ *
+ * The portal is somebody else's site, and sending the studio there wholesale
+ * loses the way back: the provider's page has no idea what "back to the
+ * manuscript" means. So the caller opens it in a new tab — and has to open
+ * that tab in the click handler itself, before this request resolves, or the
+ * browser treats it as a popup and blocks it. That timing is why the
+ * navigation cannot live in here.
+ */
 export function useOpenPortal(workspaceId: string | undefined) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       const res = await rpc.api.billing[":workspaceId"].portal.$post({
@@ -141,8 +152,27 @@ export function useOpenPortal(workspaceId: string | undefined) {
       if (!res.ok) throw await apiError(res);
       return res.json();
     },
-    onSuccess: ({ url }) => {
-      window.location.href = url;
+    /* Whatever they did over there — cancelled, changed a card — is a change
+       we have to notice on their return. */
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: keys.billing(workspaceId ?? "") }),
+  });
+}
+
+/** Calls off a scheduled cancellation. */
+export function useResumeSubscription(workspaceId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await rpc.api.billing[":workspaceId"].resume.$post({
+        param: { workspaceId: workspaceId! },
+      });
+      if (!res.ok) throw await apiError(res);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.billing(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: keys.workspaces });
     },
   });
 }

@@ -125,6 +125,8 @@ export interface BillingProvider {
   changePlan(request: PlanChangeRequest): Promise<void>;
   /** Ends a subscription immediately, rather than at the period boundary. */
   revokeSubscription(subscriptionId: string): Promise<void>;
+  /** Calls off a cancellation that has not taken effect yet. */
+  resumeSubscription(subscriptionId: string): Promise<void>;
   /** Null when the order is unknown to the provider. */
   getOrder(orderId: string): Promise<ProviderOrder | null>;
   /**

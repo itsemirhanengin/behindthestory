@@ -305,6 +305,33 @@ export async function changeWorkspacePlan(
   };
 }
 
+/**
+ * Calls off a scheduled cancellation.
+ *
+ * Cancelling stays in the provider's portal, but changing one's mind must not:
+ * somebody who cancelled an hour ago and regretted it should find the way back
+ * on the page that told them their plan was ending, not by navigating a
+ * billing portal a second time. It is also a prerequisite rather than a
+ * courtesy — the provider refuses every plan change while a cancellation is
+ * pending, so without this the whole plan section is a dead end.
+ */
+export async function resumeWorkspaceSubscription(
+  provider: BillingProvider,
+  workspaceId: string,
+): Promise<{ planSlug: PlanSlug }> {
+  const [subscription] = await getDb()
+    .select({ id: billingSubscriptions.providerSubscriptionId })
+    .from(billingSubscriptions)
+    .where(eq(billingSubscriptions.workspaceId, workspaceId));
+
+  if (!subscription) throw new NoSubscriptionError();
+
+  await provider.resumeSubscription(subscription.id);
+  // The provider's answer, not ours: it is the one that knows whether the
+  // cancellation is really off.
+  return syncWorkspaceFromProvider(provider, workspaceId);
+}
+
 /** Credits a one-off pack. Idempotent on the provider's order id. */
 export async function applyTopupOrder(input: {
   workspaceId: string;

@@ -21,6 +21,7 @@ import {
   useBillingSummary,
   useChangePlan,
   useOpenPortal,
+  useResumeSubscription,
   useSetWorkspaceModel,
   useStartCheckout,
   useSyncBilling,
@@ -60,6 +61,7 @@ export function BillingSettings() {
   const checkout = useStartCheckout(workspace?.id);
   const changePlan = useChangePlan(workspace?.id);
   const portal = useOpenPortal(workspace?.id);
+  const resume = useResumeSubscription(workspace?.id);
   const setModel = useSetWorkspaceModel(workspace?.id);
   const sync = useSyncBilling(workspace?.id);
 
@@ -85,6 +87,38 @@ export function BillingSettings() {
     router.replace(pathname, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [justCheckedOut, workspace?.id]);
+
+  /**
+   * Coming back from the provider's portal, ask the provider what changed.
+   *
+   * Cancelling, resuming or swapping a card all happen over there, and the only
+   * thing that normally tells us is a webhook — which cannot reach a laptop at
+   * all, and in production races the writer's own return to this tab. The
+   * nightly reconcile would catch up eventually, but "eventually" here means a
+   * page that calmly shows the plan they just cancelled.
+   *
+   * Keyed on having actually opened the portal, so this is one provider read
+   * after one deliberate trip, not a read on every tab switch.
+   */
+  const awaitingPortalReturn = useRef(false);
+  useEffect(() => {
+    if (!workspace?.id) return;
+
+    const syncOnReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!awaitingPortalReturn.current) return;
+      awaitingPortalReturn.current = false;
+      sync.mutate();
+    };
+
+    document.addEventListener("visibilitychange", syncOnReturn);
+    window.addEventListener("focus", syncOnReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", syncOnReturn);
+      window.removeEventListener("focus", syncOnReturn);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace?.id]);
 
   const canManage = workspace?.role === "owner" || workspace?.role === "admin";
 
@@ -113,6 +147,11 @@ export function BillingSettings() {
   const { plan, balance, subscription, refund } = summary.data;
   const renewal = subscription?.currentPeriodEnd ?? null;
   const pending = subscription?.pendingPlanSlug ?? null;
+  /* A cancellation that has not happened yet. It outranks a pending plan
+     change on this page: a plan that is ending cannot be changed at all — the
+     provider refuses — so offering a change first would be offering a dead
+     end. */
+  const endsAt = subscription?.cancelAtPeriodEnd ? renewal : null;
   const pendingLabel = catalogue.data.plans.find((p) => p.slug === pending)?.label;
   /**
    * A refund only explains the plan while it is still the reason for it. Once
@@ -160,6 +199,40 @@ export function BillingSettings() {
         </section>
       ) : null}
 
+      {/* ---- A plan on its way out, and the way back ---- */}
+      {endsAt ? (
+        <section className="space-y-3 rounded-xl border bg-card/40 p-5">
+          <div>
+            <h2 className="text-sm font-semibold">
+              Your {plan.label} plan ends on {day(endsAt)}
+            </h2>
+            <p className="mt-1 text-xs/5 text-muted-foreground">
+              Until then nothing changes. After that you&apos;re on Free, with{" "}
+              {words.format(catalogue.data.plans[0]?.monthlyWords ?? 0)} words a
+              month.
+              {balance.topupWordsRemaining > 0
+                ? " Top-ups you bought are unaffected."
+                : ""}{" "}
+              Everything you have written stays where it is.
+            </p>
+          </div>
+          {canManage ? (
+            <Button
+              size="sm"
+              onClick={() =>
+                resume.mutate(undefined, {
+                  onSuccess: () => toast.success(`${plan.label} is yours again.`),
+                  onError: (error) => toast.error((error as Error).message),
+                })
+              }
+              disabled={resume.isPending}
+            >
+              {resume.isPending ? "Keeping…" : "Keep my plan"}
+            </Button>
+          ) : null}
+        </section>
+      ) : null}
+
       {/* ---- Current plan and what is left ---- */}
       <section className="space-y-4 rounded-xl border bg-card/40 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -167,13 +240,15 @@ export function BillingSettings() {
             <h2 className="text-sm font-semibold">{plan.label}</h2>
             <p className="text-xs text-muted-foreground">
               {words.format(allowance)} words a month
-              {subscription?.cancelAtPeriodEnd
-                ? " · ends at the close of this period"
-                : ""}
             </p>
             {/* The two halves of a scheduled downgrade, in the order they
-                happen: what they have now, and what replaces it when. */}
-            {pending && pendingLabel && renewal ? (
+                happen: what they have now, and what replaces it when.
+
+                Silent while a cancellation is scheduled, because the provider
+                lets both exist at once and they describe different futures. A
+                plan that is ending does not become Starter afterwards; it
+                becomes nothing, and saying both is worse than saying one. */}
+            {!endsAt && pending && pendingLabel && renewal ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 {plan.label} until {day(renewal)}, then {pendingLabel}. Nothing is
                 charged before that.
@@ -184,7 +259,29 @@ export function BillingSettings() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => portal.mutate()}
+              onClick={() => {
+                /* The tab is opened here, in the click itself, and pointed at
+                   the portal once the link arrives: opening it in the
+                   mutation's callback is a popup as far as the browser is
+                   concerned, and gets blocked. A new tab rather than leaving,
+                   because the provider's page has no way back to a
+                   manuscript. */
+                const tab = window.open("", "_blank");
+                if (tab) tab.opener = null;
+                portal.mutate(undefined, {
+                  onSuccess: ({ url }) => {
+                    // Whatever they do over there, we find out when they come
+                    // back rather than waiting on a webhook.
+                    awaitingPortalReturn.current = true;
+                    if (tab) tab.location.replace(url);
+                    else window.location.href = url;
+                  },
+                  onError: (error) => {
+                    tab?.close();
+                    toast.error((error as Error).message);
+                  },
+                });
+              }}
               disabled={portal.isPending}
             >
               Manage subscription
@@ -295,6 +392,7 @@ export function BillingSettings() {
               subscribed: Boolean(subscription),
               pending,
               renewal,
+              endsAt,
             });
             return (
               <div
@@ -470,8 +568,28 @@ function planAction(input: {
   subscribed: boolean;
   pending: string | null;
   renewal: string | Date | null;
+  /** When a scheduled cancellation takes effect, if one is scheduled. */
+  endsAt: string | Date | null;
 }): { label: string; note: string | null; act: "checkout" | "change" | null } {
-  const { option, pending, renewal, subscribed } = input;
+  const { option, pending, renewal, subscribed, endsAt } = input;
+
+  /**
+   * A plan that is ending cannot be changed — the provider refuses every
+   * product change while a cancellation is pending, and it is right to. So
+   * nothing here is offered until that is called off, which the section above
+   * this one does. Enabling these would be handing the writer a button whose
+   * only possible outcome is an error.
+   */
+  if (endsAt) {
+    return {
+      label: option.slug === input.currentSlug ? "Ending" : "Unavailable",
+      note:
+        option.slug === input.currentSlug
+          ? `Ends ${day(endsAt)}. Keep the plan above to change it again.`
+          : null,
+      act: null,
+    };
+  }
 
   /* Free is not sold. Leaving a paid plan happens by cancelling it, which the
      provider's portal owns — it is their receipt, their card, their invoice. */
