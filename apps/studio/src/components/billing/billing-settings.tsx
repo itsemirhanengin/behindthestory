@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { MODEL_CATALOGUE, type ModelId } from "@behindthestory/ai/models";
@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   useBillingCatalogue,
   useBillingSummary,
+  useChangePlan,
   useOpenPortal,
   useSetWorkspaceModel,
   useStartCheckout,
@@ -29,6 +30,12 @@ import {
 const words = new Intl.NumberFormat("en-US");
 const money = (cents: number) =>
   cents === 0 ? "Free" : `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
+const exactMoney = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const day = (value: string | Date) =>
+  new Date(value).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "long",
+  });
 
 /** What the writer sees on the analysis buttons, so the page agrees with them. */
 const ACTION_LABELS: Array<[route: string, label: string]> = [
@@ -41,6 +48,8 @@ const ACTION_LABELS: Array<[route: string, label: string]> = [
 ];
 
 export function BillingSettings() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const workspaces = useWorkspaces();
   const catalogue = useBillingCatalogue();
@@ -49,18 +58,31 @@ export function BillingSettings() {
   const workspace = workspaces.data?.[0];
   const summary = useBillingSummary(workspace?.id);
   const checkout = useStartCheckout(workspace?.id);
+  const changePlan = useChangePlan(workspace?.id);
   const portal = useOpenPortal(workspace?.id);
   const setModel = useSetWorkspaceModel(workspace?.id);
   const sync = useSyncBilling(workspace?.id);
 
-  // Coming back from the provider, ask it directly rather than waiting for the
-  // webhook: the redirect and the webhook race each other, and losing that
-  // race means telling somebody who just paid that they are still on Free.
+  /**
+   * Coming back from the provider, ask it directly rather than waiting for the
+   * webhook: the redirect and the webhook race each other, and losing that
+   * race means telling somebody who just paid that they are still on Free.
+   *
+   * `?checkout=success` is the provider's redirect talking, and it is an event
+   * rather than a state — but it stays in the address bar, so every later
+   * reload of that URL used to re-announce a payment that had happened once
+   * and re-run the sync. Handled exactly once: a ref because a remount must
+   * not repeat it, and the parameter is then dropped from the URL so a
+   * refresh, a bookmark or the back button cannot either.
+   */
   const justCheckedOut = searchParams.get("checkout") === "success";
+  const announcedCheckout = useRef(false);
   useEffect(() => {
-    if (!justCheckedOut || !workspace?.id) return;
+    if (!justCheckedOut || !workspace?.id || announcedCheckout.current) return;
+    announcedCheckout.current = true;
     toast.success("Payment received — updating your plan…");
     sync.mutate();
+    router.replace(pathname, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [justCheckedOut, workspace?.id]);
 
@@ -88,7 +110,16 @@ export function BillingSettings() {
     );
   }
 
-  const { plan, balance, subscription } = summary.data;
+  const { plan, balance, subscription, refund } = summary.data;
+  const renewal = subscription?.currentPeriodEnd ?? null;
+  const pending = subscription?.pendingPlanSlug ?? null;
+  const pendingLabel = catalogue.data.plans.find((p) => p.slug === pending)?.label;
+  /**
+   * A refund only explains the plan while it is still the reason for it. Once
+   * they have subscribed again, the story on this page is the new plan, and an
+   * old refund notice hanging around reads as a second thing having gone wrong.
+   */
+  const refundExplainsPlan = refund && !subscription;
   const allowance = plan.monthlyWords;
   const usedOfAllowance = Math.max(allowance - balance.planWordsRemaining, 0);
   const percentUsed = allowance > 0 ? Math.min(100, (usedOfAllowance / allowance) * 100) : 0;
@@ -108,6 +139,27 @@ export function BillingSettings() {
         </section>
       ) : null}
 
+      {/* ---- Why this plan, when the writer did not choose it ---- */}
+      {refundExplainsPlan ? (
+        <section className="space-y-2 rounded-xl border bg-card/40 p-5">
+          <h2 className="text-sm font-semibold">Your subscription was refunded</h2>
+          <p className="text-xs/5 text-muted-foreground">
+            {exactMoney(refund.amount)} went back on {day(refund.createdAt)} — card
+            refunds usually take a few days to appear. You&apos;re on Free now, with{" "}
+            {words.format(plan.monthlyWords)} words a month, and the words left over
+            from the refunded period were removed.
+            {balance.topupWordsRemaining > 0 ? (
+              <>
+                {" "}
+                Your top-ups aren&apos;t affected —{" "}
+                {words.format(balance.topupWordsRemaining)} words are still yours.
+              </>
+            ) : null}{" "}
+            Everything you wrote is untouched.
+          </p>
+        </section>
+      ) : null}
+
       {/* ---- Current plan and what is left ---- */}
       <section className="space-y-4 rounded-xl border bg-card/40 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -119,6 +171,14 @@ export function BillingSettings() {
                 ? " · ends at the close of this period"
                 : ""}
             </p>
+            {/* The two halves of a scheduled downgrade, in the order they
+                happen: what they have now, and what replaces it when. */}
+            {pending && pendingLabel && renewal ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {plan.label} until {day(renewal)}, then {pendingLabel}. Nothing is
+                charged before that.
+              </p>
+            ) : null}
           </div>
           {canManage && subscription ? (
             <Button
@@ -225,10 +285,27 @@ export function BillingSettings() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {catalogue.data.plans.map((option) => {
             const current = option.slug === plan.slug;
+            const cta = planAction({
+              option,
+              currentSlug: plan.slug,
+              currentLabel: plan.label,
+              currentPriceCents:
+                catalogue.data.plans.find((p) => p.slug === plan.slug)
+                  ?.priceCents ?? 0,
+              subscribed: Boolean(subscription),
+              pending,
+              renewal,
+            });
             return (
               <div
                 key={option.slug}
-                className={`space-y-3 rounded-xl border p-4 ${
+                /* A column rather than a stack, so the button can be pinned to
+                   the floor: the notes above it are two or three lines
+                   depending on the plan, and buttons that sit at four
+                   different heights read as four different kinds of thing.
+                   `gap` rather than `space-y`, which would set a top margin on
+                   the button and beat `mt-auto`. */
+                className={`flex h-full flex-col gap-3 rounded-xl border p-4 ${
                   current ? "border-primary bg-card/60" : "bg-card/30"
                 }`}
               >
@@ -252,24 +329,46 @@ export function BillingSettings() {
                       : "Fastest model"}
                   </li>
                 </ul>
+                {/* What the click will actually do, before it is clicked.
+                    "Choose" on every card hid the only thing the writer needs
+                    to know: whether money moves today. */}
+                {cta.note ? (
+                  <p className="text-xs/5 text-muted-foreground">{cta.note}</p>
+                ) : null}
                 <Button
-                  className="w-full"
+                  className="mt-auto w-full"
                   size="sm"
-                  variant={current ? "outline" : "default"}
+                  variant={current && !cta.act ? "outline" : "default"}
                   disabled={
-                    current ||
-                    option.slug === "free" ||
+                    !cta.act ||
                     !canManage ||
-                    checkout.isPending
+                    checkout.isPending ||
+                    changePlan.isPending
                   }
-                  onClick={() =>
-                    checkout.mutate(
-                      { type: "plan", plan: option.slug as "starter" | "pro" | "team" },
-                      { onError: (error) => toast.error((error as Error).message) },
-                    )
-                  }
+                  onClick={() => {
+                    const slug = option.slug as "starter" | "pro" | "team";
+                    const onError = (error: unknown) =>
+                      toast.error((error as Error).message);
+
+                    if (cta.act === "checkout") {
+                      checkout.mutate({ type: "plan", plan: slug }, { onError });
+                      return;
+                    }
+                    changePlan.mutate(slug, {
+                      onSuccess: (result) => {
+                        toast.success(
+                          result.direction === "upgrade"
+                            ? `You're on ${option.label} now.`
+                            : result.pendingPlanSlug && result.effectiveAt
+                              ? `${option.label} starts on ${day(result.effectiveAt)}.`
+                              : `Staying on ${option.label}.`,
+                        );
+                      },
+                      onError,
+                    });
+                  }}
                 >
-                  {current ? "Current plan" : "Choose"}
+                  {cta.label}
                 </Button>
               </div>
             );
@@ -346,6 +445,99 @@ export function BillingSettings() {
       </section>
     </div>
   );
+}
+
+/**
+ * What one plan card's button does, and what it should promise.
+ *
+ * All of the awkwardness of plan changes lives in this function on purpose.
+ * Whether money moves today, whether the change is immediate, and whether the
+ * card is even actionable all depend on the same three facts — the direction,
+ * whether there is a subscription to change, and whether a change is already
+ * scheduled — and spreading that across the JSX is how a card ends up
+ * cheerfully offering "Choose" for something that will not happen for a month.
+ *
+ * The amounts are deliberately not computed here. Proration is the provider's
+ * arithmetic, with tax and discounts in it; a precise figure invented by the
+ * client would be wrong exactly when it mattered. So the copy commits to what
+ * is certainly true — a credited remainder, and the next full charge.
+ */
+function planAction(input: {
+  option: { slug: string; label: string; priceCents: number };
+  currentSlug: string;
+  currentLabel: string;
+  currentPriceCents: number;
+  subscribed: boolean;
+  pending: string | null;
+  renewal: string | Date | null;
+}): { label: string; note: string | null; act: "checkout" | "change" | null } {
+  const { option, pending, renewal, subscribed } = input;
+
+  /* Free is not sold. Leaving a paid plan happens by cancelling it, which the
+     provider's portal owns — it is their receipt, their card, their invoice. */
+  if (option.slug === "free") {
+    return {
+      label: input.currentSlug === "free" ? "Current plan" : "Cancel to return",
+      note:
+        input.currentSlug === "free"
+          ? null
+          : "Cancel from Manage subscription — your plan then runs to the end of the period.",
+      act: null,
+    };
+  }
+
+  // Already scheduled. Saying "From 3 September" twice is enough; a second
+  // button that re-requests the same change is a way to fat-finger a charge.
+  if (option.slug === pending) {
+    return {
+      label: renewal ? `From ${day(renewal)}` : "Scheduled",
+      note: "Already scheduled. Nothing to do.",
+      act: null,
+    };
+  }
+
+  if (option.slug === input.currentSlug) {
+    // The way back from a downgrade they have thought better of.
+    if (pending) {
+      return {
+        label: `Stay on ${option.label}`,
+        note: "Cancels the scheduled change and keeps this plan.",
+        act: "change",
+      };
+    }
+    return { label: "Current plan", note: null, act: null };
+  }
+
+  // No subscription yet: this is a purchase, and it happens at the provider.
+  if (!subscribed) {
+    return {
+      label: "Choose",
+      note: `${money(option.priceCents)} a month, starting today.`,
+      act: "checkout",
+    };
+  }
+
+  const upgrade = option.priceCents > input.currentPriceCents;
+
+  if (upgrade) {
+    return {
+      label: "Upgrade now",
+      note: `Starts immediately. The unused part of ${input.currentLabel} is credited against it${
+        renewal ? `, then ${exactMoney(option.priceCents)} on ${day(renewal)}` : ""
+      }.`,
+      act: "change",
+    };
+  }
+
+  /* The date is repeated from the button on purpose: the note has to read as a
+     sentence on its own, and "until then" pointing at a button is not one. */
+  return {
+    label: renewal ? `Switch on ${day(renewal)}` : "Switch at renewal",
+    note: renewal
+      ? `Nothing charged today. ${input.currentLabel} runs to ${day(renewal)}, then ${exactMoney(option.priceCents)}.`
+      : `Nothing charged today. ${input.currentLabel} runs to the end of this period.`,
+    act: "change",
+  };
 }
 
 function Figure({ value, label }: { value: string; label: string }) {

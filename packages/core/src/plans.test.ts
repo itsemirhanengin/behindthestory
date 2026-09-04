@@ -16,6 +16,7 @@ import {
   estimateWordsForRoute,
   isProseRoute,
   maxOutputTokensForRoute,
+  planChangeDirection,
   planFor,
   resolveWritingModel,
   wordsForRoute,
@@ -242,5 +243,33 @@ describe("countWords", () => {
   it("is zero for nothing", () => {
     expect(countWords("")).toBe(0);
     expect(countWords("   \n  ")).toBe(0);
+  });
+});
+
+describe("planChangeDirection", () => {
+  /**
+   * The direction decides when a change lands and whether money moves today,
+   * so getting it backwards would charge somebody for a downgrade or hand out
+   * a month of Pro for nothing.
+   */
+  it("reads price, in both directions", () => {
+    expect(planChangeDirection("starter", "pro")).toBe("upgrade");
+    expect(planChangeDirection("pro", "starter")).toBe("downgrade");
+    expect(planChangeDirection("free", "starter")).toBe("upgrade");
+    expect(planChangeDirection("team", "free")).toBe("downgrade");
+  });
+
+  it("calls a plan its own equal, which is how a scheduled change is undone", () => {
+    expect(planChangeDirection("pro", "pro")).toBe("same");
+  });
+
+  it("agrees with the price list it is derived from", () => {
+    const ordered = ["free", "starter", "pro", "team"] as const;
+    for (let i = 1; i < ordered.length; i += 1) {
+      expect(PLANS[ordered[i]].priceCents).toBeGreaterThan(
+        PLANS[ordered[i - 1]].priceCents,
+      );
+      expect(planChangeDirection(ordered[i - 1], ordered[i])).toBe("upgrade");
+    }
   });
 });

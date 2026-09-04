@@ -349,6 +349,185 @@ export async function grantPlanWords(input: {
   }
 }
 
+/**
+ * Credits what a mid-period upgrade just bought.
+ *
+ * `grantPlanWords` cannot do this job. It is keyed on the subscription and the
+ * period start, and an upgrade deliberately leaves both alone — the billing
+ * anchor does not move — so calling it again is a duplicate that rolls back
+ * and applies nothing. A writer who upgraded to Pro would keep paying Pro's
+ * price against Starter's allowance, with the page cheerfully labelled Pro.
+ *
+ * So: add the difference between the two allowances and relabel the balance.
+ * The difference rather than the full new allowance, because the words already
+ * granted for this period have not gone anywhere — the writer ends up with
+ * exactly what the new plan grants, minus what they have already spent.
+ *
+ * A downgrade never reaches here. It takes effect at the renewal, which is
+ * when `grantPlanWords` hands out the new plan's allowance anyway; that is the
+ * whole reason deferring one costs nothing to implement.
+ */
+export async function grantPlanUpgradeWords(input: {
+  workspaceId: string;
+  fromPlan: PlanSlug;
+  toPlan: PlanSlug;
+  requestId: string;
+  note?: string;
+}): Promise<BalanceSnapshot | null> {
+  const difference =
+    PLANS[input.toPlan].monthlyWords - PLANS[input.fromPlan].monthlyWords;
+  const added = Math.max(0, difference);
+
+  try {
+    return await getDb().transaction(async (tx) => {
+      const { rows } = await tx.execute<BalanceRow>(sql`
+        update workspace_balances
+           set plan_slug            = ${input.toPlan},
+               plan_words_remaining = plan_words_remaining + ${added},
+               updated_at           = now()
+         where workspace_id = ${input.workspaceId}
+        returning *
+      `);
+
+      const updated = rows[0];
+      if (!updated) return null;
+
+      await writeLedger(tx, {
+        workspaceId: input.workspaceId,
+        requestId: input.requestId,
+        reason: "grant",
+        planDelta: added,
+        topupDelta: 0,
+        note: input.note ?? `${input.fromPlan} → ${input.toPlan}`,
+        after: updated,
+      });
+
+      return snapshotRaw(updated);
+    });
+  } catch (error) {
+    if (isDuplicate(error)) return readBalance(input.workspaceId);
+    throw error;
+  }
+}
+
+/**
+ * Takes back the allowance a refunded period had bought.
+ *
+ * Words already spent are gone — the model calls were made and paid for, and
+ * there is nothing to reclaim. What this stops is the rest: without it, buying
+ * Pro and asking for the money back leaves a full Pro allowance in place, and
+ * the cheapest way to write a novel here is to do that every month.
+ *
+ * The ceiling is what the workspace is entitled to *now*, so a writer who had
+ * already spent most of the period keeps what little is left rather than being
+ * pushed below it. Top-ups are never touched: they were bought separately and
+ * this refund was not for them.
+ */
+export async function clampPlanWords(input: {
+  workspaceId: string;
+  ceiling: number;
+  requestId: string;
+  note?: string;
+}): Promise<BalanceSnapshot | null> {
+  const ceiling = Math.max(0, Math.round(input.ceiling));
+
+  try {
+    return await getDb().transaction(async (tx) => {
+      const { rows } = await tx.execute<BalanceRow & { prev_plan: number }>(sql`
+        with prev as (
+          select plan_words_remaining as prev_plan
+            from workspace_balances
+           where workspace_id = ${input.workspaceId}
+        )
+        update workspace_balances b
+           set plan_words_remaining = least(b.plan_words_remaining, ${ceiling}),
+               updated_at           = now()
+          from prev
+         where b.workspace_id = ${input.workspaceId}
+        returning b.*, prev.prev_plan
+      `);
+
+      const updated = rows[0];
+      if (!updated) return null;
+
+      const removed =
+        Number(updated.prev_plan) - Number(updated.plan_words_remaining);
+
+      await writeLedger(tx, {
+        workspaceId: input.workspaceId,
+        requestId: input.requestId,
+        reason: "refund",
+        planDelta: -removed,
+        topupDelta: 0,
+        note: input.note ?? "refunded period",
+        after: updated,
+      });
+
+      return snapshotRaw(updated);
+    });
+  } catch (error) {
+    if (isDuplicate(error)) return readBalance(input.workspaceId);
+    throw error;
+  }
+}
+
+/**
+ * Takes back a refunded pack.
+ *
+ * Floored at zero rather than allowed to go negative: a pack that was bought,
+ * spent and then refunded is a loss already taken, and carrying it forward as
+ * a debt against words the writer has not bought yet would make the next
+ * purchase silently worth less than it says on the button.
+ */
+export async function clawbackTopupWords(input: {
+  workspaceId: string;
+  words: number;
+  requestId: string;
+  note?: string;
+}): Promise<BalanceSnapshot | null> {
+  const words = Math.max(0, Math.round(input.words));
+  if (words === 0) return readBalance(input.workspaceId);
+
+  try {
+    return await getDb().transaction(async (tx) => {
+      const { rows } = await tx.execute<BalanceRow & { prev_topup: number }>(sql`
+        with prev as (
+          select topup_words_remaining as prev_topup
+            from workspace_balances
+           where workspace_id = ${input.workspaceId}
+        )
+        update workspace_balances b
+           set topup_words_remaining = greatest(b.topup_words_remaining - ${words}, 0),
+               updated_at            = now()
+          from prev
+         where b.workspace_id = ${input.workspaceId}
+        returning b.*, prev.prev_topup
+      `);
+
+      const updated = rows[0];
+      if (!updated) return null;
+
+      const removed =
+        Number(updated.prev_topup) - Number(updated.topup_words_remaining);
+
+      await writeLedger(tx, {
+        workspaceId: input.workspaceId,
+        requestId: input.requestId,
+        reason: "refund",
+        planDelta: 0,
+        topupDelta: -removed,
+        note: input.note ?? "refunded top-up",
+        after: updated,
+      });
+
+      return snapshotRaw(updated);
+    });
+  } catch (error) {
+    if (isDuplicate(error)) return readBalance(input.workspaceId);
+    throw error;
+  }
+}
+
 /** Adds a purchased pack. Never expires, so it goes to the top-up counter. */
 export async function grantTopupWords(input: {
   workspaceId: string;

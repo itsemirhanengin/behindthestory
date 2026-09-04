@@ -80,6 +80,37 @@ export function useStartCheckout(workspaceId: string | undefined) {
   });
 }
 
+export type PlanChangeInput = InferRequestType<
+  (typeof rpc.api.billing)[":workspaceId"]["plan"]["$post"]
+>["json"];
+
+/**
+ * Moves an existing subscription between plans.
+ *
+ * Separate from `useStartCheckout` because it is a different act: checkout
+ * takes somebody who is paying nothing to a hosted page, while this changes an
+ * agreement that already exists, in place, with no redirect. Sending a
+ * subscriber through checkout would open a second subscription and bill both.
+ */
+export function useChangePlan(workspaceId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (plan: PlanChangeInput["plan"]) => {
+      const res = await rpc.api.billing[":workspaceId"].plan.$post({
+        param: { workspaceId: workspaceId! },
+        json: { plan },
+      });
+      if (!res.ok) throw await apiError(res);
+      return res.json();
+    },
+    onSuccess: () => {
+      // The allowance moves with an upgrade, and the rail shows it.
+      queryClient.invalidateQueries({ queryKey: keys.billing(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: keys.workspaces });
+    },
+  });
+}
+
 /**
  * Asks the server to re-read the subscription from the provider.
  *
