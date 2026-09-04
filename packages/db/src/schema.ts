@@ -54,6 +54,18 @@ export const CHAR_STATUS_VALUES = ["alive", "dead", "unknown"] as const;
 export const SESSION_CLIENT_VALUES = ["web", "mobile"] as const;
 
 /**
+ * What the writer is actually here to do. Coarse on purpose: it exists to be
+ * shown on a profile and, later, to match collaborators — not to branch logic.
+ */
+export const WRITING_GOAL_VALUES = [
+  "first_novel",
+  "publishing",
+  "serial",
+  "craft",
+  "hobby",
+] as const;
+
+/**
  * How much an event mattered. This is the ranking signal that makes a
  * 600-chapter relationship readable: `pivotal` events are the ones the "why"
  * trace walks and the ones that always survive the prompt's token budget.
@@ -71,10 +83,57 @@ export const users = pgTable(
     /** Always stored lower-cased; compare against `normalizeEmail()` output. */
     email: text("email").notNull(),
     displayName: text("display_name").notNull().default(""),
+
+    /**
+     * The handle. Minted by the system at first sign-in and changeable
+     * afterwards, always stored lower-cased.
+     *
+     * This is the account's stable public name, and the one thing here that
+     * collaboration will need before anything else: an invitation, a comment
+     * byline and a shared workspace all have to address a writer by something
+     * that is unique, safe in a URL and not their email address.
+     */
+    username: text("username").notNull(),
+
+    // --- Public profile ----------------------------------------------------
+
+    /**
+     * Object key in the avatar bucket, not a URL. The bucket's public base is
+     * deployment configuration, and baking it into the row would make moving
+     * buckets a data migration.
+     */
+    avatarKey: text("avatar_key").notNull().default(""),
+    bio: text("bio").notNull().default(""),
+
+    /**
+     * The writer's own taste, in the platform's existing vocabulary.
+     *
+     * Kept as columns rather than a jsonb blob because these are meant to be
+     * queried — "who else writes third-limited horror" is the shape of every
+     * collaboration feature that follows — and because a blob is where
+     * undocumented keys go to accumulate.
+     */
+    favoriteGenres: text("favorite_genres").array().notNull().default(sql`'{}'`),
+    /** Empty string means "no preference stated", not a default of `first`. */
+    preferredPov: text("preferred_pov", { enum: POV_VALUES }),
+    writingGoal: text("writing_goal", { enum: WRITING_GOAL_VALUES }),
+    /** Authors and books that shaped them. Free text; it is a person talking. */
+    influences: text("influences").notNull().default(""),
+    /**
+     * Prose the writer does not want. The same idea as a novel's `styleNotes`,
+     * one level up — an account-wide default a new novel can start from instead
+     * of the author retyping their own dislikes into every book.
+     */
+    avoids: text("avoids").notNull().default(""),
+
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
     lastSeenAt: timestamp("last_seen_at"),
   },
-  (t) => [uniqueIndex("users_email_idx").on(t.email)],
+  (t) => [
+    uniqueIndex("users_email_idx").on(t.email),
+    uniqueIndex("users_username_idx").on(t.username),
+  ],
 );
 
 /**
@@ -916,6 +975,8 @@ export const aiSuggestionFeedback = pgTable(
   ],
 );
 
+export type User = typeof users.$inferSelect;
+export type WritingGoal = (typeof WRITING_GOAL_VALUES)[number];
 export type Novel = typeof novels.$inferSelect;
 export type NovelDraft = typeof novelDrafts.$inferSelect;
 export type Character = typeof characters.$inferSelect;

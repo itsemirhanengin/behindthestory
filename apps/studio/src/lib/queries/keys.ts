@@ -10,6 +10,13 @@
 export const keys = {
   session: ["session"] as const,
 
+  profile: ["profile"] as const,
+  /** The handle-availability probe. Keyed on the candidate so each answer is
+   *  cached against the text it belongs to rather than replacing the last one. */
+  usernameAvailable: (username: string) =>
+    ["profile", "username-available", username] as const,
+  publicProfile: (username: string) => ["profile", "public", username] as const,
+
   workspaces: ["workspaces"] as const,
   billingCatalogue: ["billing", "catalogue"] as const,
   billing: (workspaceId: string) => ["billing", workspaceId] as const,

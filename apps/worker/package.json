@@ -38,6 +38,7 @@
   },
   "imports": {
     "//": "esbuild stops at the first matching pattern rather than falling through, so the one .tsx file needs an explicit entry ahead of the wildcard. Same reason as apps/api.",
+    "#email/templates/email-change-code": "./src/email/templates/email-change-code.tsx",
     "#email/templates/sign-in-code": "./src/email/templates/sign-in-code.tsx",
     "#*": "./src/*.ts"
   }

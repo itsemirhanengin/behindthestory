@@ -45,3 +45,16 @@ export const OTP_LIMITS = {
   perEmail: { limit: 3, windowSeconds: 15 * 60 },
   perIp: { limit: 10, windowSeconds: 15 * 60 },
 } as const;
+
+/**
+ * Changing the address on an account.
+ *
+ * Tighter than sign-in and keyed on the account rather than the target address,
+ * because this endpoint answers "does an account already use this address" to
+ * the caller. That answer is worth having — someone moving their own account
+ * needs to be told why it failed rather than watching a code never arrive — but
+ * it is only safe while nobody can ask it a thousand times.
+ */
+export const EMAIL_CHANGE_LIMITS = {
+  perUser: { limit: 5, windowSeconds: 60 * 60 },
+} as const;

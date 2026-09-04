@@ -9,10 +9,13 @@ import {
   RiLogoutBoxRLine,
   RiMoonLine,
   RiSunLine,
+  RiUserLine,
 } from "@remixicon/react";
 
+import { profileInitial, profileName } from "@behindthestory/core/profile";
+
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,7 +56,10 @@ export function AccountMenu() {
     );
   }
 
-  const { email } = data.user;
+  const { email, avatarUrl } = data.user;
+  // The session carries both, so the header never waits on a second request to
+  // know whose account this is.
+  const name = profileName(data.user);
 
   return (
     <DropdownMenu>
@@ -64,20 +70,36 @@ export function AccountMenu() {
           className="shrink-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <Avatar>
+            {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
             <AvatarFallback className="bg-primary/10 font-medium text-primary uppercase">
-              {email.slice(0, 1)}
+              {profileInitial(data.user)}
             </AvatarFallback>
           </Avatar>
         </button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-60">
+        {/* Name over handle over address: the first is who they are, the second
+            is how they are addressed, and the third is only here to confirm
+            which account is signed in. */}
         <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="label-caps">Signed in as</span>
-          <span className="truncate font-normal text-foreground">{email}</span>
+          <span className="truncate font-medium text-foreground">{name}</span>
+          <span className="truncate text-xs font-normal text-muted-foreground">
+            @{data.user.username}
+          </span>
+          <span className="truncate text-xs font-normal text-muted-foreground">
+            {email}
+          </span>
         </DropdownMenuLabel>
 
         <DropdownMenuSeparator />
+
+        <DropdownMenuItem asChild>
+          <Link href="/settings/profile">
+            <RiUserLine className="size-4" />
+            Profile
+          </Link>
+        </DropdownMenuItem>
 
         <DropdownMenuItem asChild>
           <Link href="/settings/billing">

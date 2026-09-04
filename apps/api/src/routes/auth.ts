@@ -23,6 +23,7 @@ import {
   revokeSession,
   startSession,
 } from "#lib/auth/session";
+import { avatarUrlFor } from "#lib/storage";
 import { requireAuth, sessionToken, type AuthEnv } from "#middleware/auth";
 
 const FAILURES = {
@@ -142,7 +143,13 @@ export const authRoutes = new Hono<AuthEnv>()
     const user = await resolveSession(sessionToken(c));
     if (!user) return c.json({ user: null, devices: [] });
 
-    return c.json({ user, devices: await listSessions(user.id) });
+    return c.json({
+      // The avatar is resolved here rather than in the client: the bucket's
+      // public origin is deployment configuration, and a browser that had to
+      // know it would need it injected at build time.
+      user: { ...user, avatarUrl: avatarUrlFor(user.avatarKey) },
+      devices: await listSessions(user.id),
+    });
   })
   /** Sign out this device only. */
   .delete("/session", requireAuth, async (c) => {

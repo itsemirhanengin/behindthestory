@@ -48,7 +48,12 @@ function check(label: string, ok: boolean, detail = "") {
 // --- fixture ---------------------------------------------------------------
 const [user] = await db
   .insert(users)
-  .values({ email: `meter-${Date.now()}@example.com`, displayName: "Meter" })
+  .values({
+    email: `meter-${Date.now()}@example.com`,
+    displayName: "Meter",
+    // Handles are unique; the timestamp keeps repeated runs from colliding.
+    username: `meter-${Date.now()}`,
+  })
   .returning();
 const [workspace] = await db
   .insert(workspaces)

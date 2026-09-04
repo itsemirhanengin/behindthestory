@@ -47,6 +47,7 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       { source: "/api/auth/:path*", destination: `${API_URL}/api/auth/:path*` },
+      { source: "/api/profile/:path*", destination: `${API_URL}/api/profile/:path*` },
       { source: "/api/workspaces/:path*", destination: `${API_URL}/api/workspaces/:path*` },
       { source: "/api/billing/:path*", destination: `${API_URL}/api/billing/:path*` },
       { source: "/api/novels/:path*", destination: `${API_URL}/api/novels/:path*` },

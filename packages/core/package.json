@@ -10,10 +10,12 @@
     "./context-builder": "./src/context-builder.ts",
     "./onboarding": "./src/onboarding.ts",
     "./plans": "./src/plans.ts",
+    "./profile": "./src/profile.ts",
     "./prose-stream": "./src/prose-stream.ts",
     "./scene-context": "./src/scene-context.ts",
     "./story-events": "./src/story-events.ts",
     "./story-state": "./src/story-state.ts",
+    "./username": "./src/username.ts",
     "./word-balance": "./src/word-balance.ts"
   },
   "scripts": {
