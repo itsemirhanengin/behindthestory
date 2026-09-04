@@ -16,6 +16,8 @@ export const keys = {
 
   novels: ["novels"] as const,
   novel: (novelId: string) => ["novels", novelId] as const,
+  novelDrafts: ["novel-drafts"] as const,
+  novelDraft: (draftId: string) => ["novel-drafts", draftId] as const,
 
   chapters: (novelId: string) => ["novels", novelId, "chapters"] as const,
   characters: (novelId: string) => ["novels", novelId, "characters"] as const,

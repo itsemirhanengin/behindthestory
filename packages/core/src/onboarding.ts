@@ -3,9 +3,10 @@ import type { Novel } from "@behindthestory/db/schema";
 /**
  * Contracts shared by the new-novel wizard and the two AI endpoints behind it.
  *
- * Nothing is written to the database until the last step, so these shapes only
- * ever live in client state and in request bodies. This module deliberately has
- * no runtime dependency on zod or on the drizzle schema — the wizard is a client
+ * No *novel* is written until the last step, but the wizard's state is
+ * snapshotted whole into `novel_drafts` as the author works, so these shapes
+ * also live in that row's jsonb columns. This module deliberately has no
+ * runtime dependency on zod or on the drizzle schema — the wizard is a client
  * component and pulling either into the browser bundle would be pure weight.
  * The matching zod schemas live next to the routes that validate with them.
  */

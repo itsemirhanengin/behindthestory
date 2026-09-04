@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -29,6 +30,13 @@ import {
 } from "@/lib/queries/ai";
 import { useCreateNovel } from "@/lib/queries/novels";
 import {
+  useDeleteNovelDraft,
+  useNovelDraft,
+  useSaveNovelDraft,
+  type NovelDraft,
+  type NovelDraftInput,
+} from "@/lib/queries/novel-drafts";
+import {
   MIN_DESCRIPTION_WORDS,
   countWords,
   type Reading,
@@ -40,7 +48,6 @@ import {
   type StyleResponse,
   type WizardTurn,
 } from "@behindthestory/core/onboarding";
-import type { Novel } from "@/lib/queries/types";
 import { PremiseStep } from "./premise-step";
 import { AlignmentStep } from "./alignment-step";
 import { StyleStep } from "./style-step";
@@ -79,39 +86,223 @@ const STEPS = [
 
 const LAST_STEP = STEPS.length - 1;
 
-export function NewNovelWizard() {
+/** Same cadence as the chapter editor: long enough to sit out a burst of
+ *  typing, short enough that a closed tab loses at most a phrase. */
+const AUTOSAVE_DELAY = 1200;
+
+type DraftSaveState = "dirty" | "saving" | "saved";
+
+/**
+ * The draft has to be in hand before the form mounts: hydrating server state
+ * into a wizard the author has already started typing in would clobber them,
+ * so the form is simply not rendered until the row is in. The row always
+ * exists — "New novel" creates it before routing here — so an error means the
+ * draft is genuinely gone (discarded on another device), not a blip.
+ */
+export function NewNovelWizard({ draftId }: { draftId: string }) {
+  const draft = useNovelDraft(draftId);
+
+  if (draft.isError) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+          Draft
+        </p>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          This draft is gone
+        </h1>
+        <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+          It was discarded or already published — possibly from another device.
+          Nothing on the shelf was harmed.
+        </p>
+        <Button asChild variant="secondary">
+          <Link href="/">Back to the shelf</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (draft.isPending) {
+    return (
+      <div className="flex h-dvh items-center justify-center">
+        <RiLoader4Line className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return <WizardForm draft={draft.data} />;
+}
+
+function WizardForm({ draft }: { draft: NovelDraft }) {
   const router = useRouter();
   const scrollRef = useRef<HTMLElement>(null);
   const readNovel = useAiOnboardingReading();
   const proposeStyle = useAiOnboardingStyle();
   const createNovel = useCreateNovel();
+  const saveDraft = useSaveNovelDraft(draft.id);
+  const deleteDraft = useDeleteNovelDraft();
 
-  const [step, setStep] = useState(0);
-  const [maxStep, setMaxStep] = useState(0);
+  const [step, setStep] = useState(draft.step);
+  const [maxStep, setMaxStep] = useState(draft.maxStep);
 
-  const [title, setTitle] = useState("");
-  const [titleFromAi, setTitleFromAi] = useState(false);
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(draft.title);
+  const [titleFromAi, setTitleFromAi] = useState(draft.titleFromAi);
+  const [description, setDescription] = useState(draft.description);
 
-  const [reading, setReading] = useState<Reading | null>(null);
-  const [readingRevision, setReadingRevision] = useState(0);
+  // The jsonb columns come back untyped; the PUT that stored them validated
+  // these exact shapes with zod schemas that `satisfies` the core types, so
+  // the casts narrow rather than assert.
+  const [reading, setReading] = useState<Reading | null>(
+    () => draft.reading as Reading | null,
+  );
+  const [readingRevision, setReadingRevision] = useState(draft.readingRevision);
   const [readingBusy, setReadingBusy] = useState(false);
   const [readingError, setReadingError] = useState<string | null>(null);
-  const [turns, setTurns] = useState<WizardTurn[]>([]);
+  const [turns, setTurns] = useState<WizardTurn[]>(
+    () => draft.turns as WizardTurn[],
+  );
 
-  const [style, setStyle] = useState<StyleFields | null>(null);
-  const [styleProposal, setStyleProposal] = useState<StyleProposal | null>(null);
+  const [style, setStyle] = useState<StyleFields | null>(
+    () => draft.style as StyleFields | null,
+  );
+  const [styleProposal, setStyleProposal] = useState<StyleProposal | null>(
+    () => draft.styleProposal as StyleProposal | null,
+  );
   const [styleBusy, setStyleBusy] = useState(false);
   const [styleError, setStyleError] = useState<string | null>(null);
   /** Which reading revision the current style was derived from. */
-  const [styleFrom, setStyleFrom] = useState(-1);
+  const [styleFrom, setStyleFrom] = useState(draft.styleFrom);
 
   const [creating, setCreating] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
+  const [saveState, setSaveState] = useState<DraftSaveState>("saved");
 
   // Refs rather than the busy flags: the effects below fire on step entry, and
   // a state update that has not landed yet would let a second request through.
   const inFlight = useRef({ reading: false, style: false });
+
+  // --- Draft autosave ------------------------------------------------------
+  // The same version-stamped debounce as the chapter editor: every change bumps
+  // `changeVersion`, a save only counts as caught-up when the version it
+  // carried is still the newest one when the response lands.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dirtyRef = useRef(false);
+  const changeVersionRef = useRef(0);
+  const savedVersionRef = useRef(0);
+  const saveErrorShownRef = useRef(false);
+  /** Set before discard and publish so the unmount flush cannot resurrect a
+   *  draft those paths just deleted. */
+  const suppressFlushRef = useRef(false);
+  const snapshotRef = useRef<NovelDraftInput | null>(null);
+
+  // Refreshed every render, same as `advanceRef` below: the flush paths read
+  // the newest state without a dependency list that would resubscribe them.
+  useEffect(() => {
+    snapshotRef.current = {
+      step,
+      maxStep,
+      title,
+      titleFromAi,
+      description,
+      reading,
+      readingRevision,
+      turns,
+      style,
+      styleProposal,
+      styleFrom,
+    };
+  });
+
+  const saveDraftAsync = saveDraft.mutateAsync;
+  const persistDraft = useCallback(async () => {
+    const snapshot = snapshotRef.current;
+    if (!snapshot || suppressFlushRef.current) return;
+    const version = changeVersionRef.current;
+    setSaveState("saving");
+    try {
+      await saveDraftAsync(snapshot);
+      savedVersionRef.current = Math.max(savedVersionRef.current, version);
+      if (savedVersionRef.current >= changeVersionRef.current) {
+        dirtyRef.current = false;
+        saveErrorShownRef.current = false;
+        setSaveState("saved");
+      } else {
+        setSaveState("dirty");
+      }
+    } catch {
+      setSaveState("dirty");
+      if (!saveErrorShownRef.current) {
+        saveErrorShownRef.current = true;
+        toast.error(
+          "The draft could not be saved. Your work is still open here.",
+        );
+      }
+    }
+  }, [saveDraftAsync]);
+
+  const scheduleSave = useCallback(() => {
+    changeVersionRef.current += 1;
+    dirtyRef.current = true;
+    setSaveState("dirty");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      void persistDraft();
+    }, AUTOSAVE_DELAY);
+  }, [persistDraft]);
+
+  // Any persisted field changing schedules a save. The first run is the
+  // hydration itself, not a change.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      hydratedRef.current = true;
+      return;
+    }
+    scheduleSave();
+  }, [
+    step,
+    maxStep,
+    title,
+    titleFromAi,
+    description,
+    reading,
+    readingRevision,
+    turns,
+    style,
+    styleProposal,
+    styleFrom,
+    scheduleSave,
+  ]);
+
+  /** Last-chance write, bypassing the RPC client: `keepalive` lets it outlive
+   *  the page, which is the whole point of both call sites. */
+  const flushDraft = useCallback(() => {
+    if (suppressFlushRef.current || !dirtyRef.current) return;
+    const snapshot = snapshotRef.current;
+    if (!snapshot) return;
+    fetch(`/api/novel-drafts/${draft.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(snapshot),
+      keepalive: true,
+    }).catch(() => {});
+  }, [draft.id]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      flushDraft();
+    };
+  }, [flushDraft]);
+
+  // A closing tab gets the pending debounce flushed rather than a scare
+  // dialog: the draft outliving the tab is the feature.
+  useEffect(() => {
+    window.addEventListener("pagehide", flushDraft);
+    return () => window.removeEventListener("pagehide", flushDraft);
+  }, [flushDraft]);
+  // --------------------------------------------------------------------------
 
   const runReading = useCallback(
     async (corrections: string[]): Promise<Reading | null> => {
@@ -224,12 +415,33 @@ export function NewNovelWizard() {
     [reading, readingError, runReading, style, styleError, runStyle],
   );
 
+  // A draft with work in it re-enters its step through `goTo` so a session
+  // that closed mid-generation picks the request back up, exactly as if the
+  // author had just clicked Continue. A freshly minted draft skips all of it —
+  // being told "restored" on a blank page would be noise.
+  const resumedRef = useRef(false);
+  const hadProgress =
+    draft.step > 0 ||
+    draft.title.trim() !== "" ||
+    draft.description.trim() !== "";
+  useEffect(() => {
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    if (!hadProgress) return;
+    toast("Draft restored", {
+      description: "Everything is exactly where you left it.",
+    });
+    goTo(step);
+  }, [hadProgress, step, goTo]);
+
   /** `fromAi` is what keeps the "named by AI" badge honest when the author picks
    *  one of the suggested titles instead of typing their own. */
   const changeTitle = useCallback((value: string, fromAi = false) => {
     setTitle(value);
     setTitleFromAi(fromAi);
   }, []);
+
+  const deleteDraftMutate = deleteDraft.mutate;
 
   const create = useCallback(async () => {
     if (!reading || !style || creating) return;
@@ -240,13 +452,26 @@ export function NewNovelWizard() {
         premise: reading.premise,
         ...style,
       });
+      // The draft has been published; from here nothing may write it back.
+      // Deleting it is fire-and-forget — a failed cleanup must not block the
+      // novel that already exists.
+      suppressFlushRef.current = true;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      deleteDraftMutate(draft.id);
       toast.success(`“${novel.title}” is ready`);
       router.push(`/novels/${novel.id}/bible`);
     } catch (e) {
       toast.error((e as Error).message);
       setCreating(false);
     }
-  }, [reading, style, creating, title, router]);
+  }, [reading, style, creating, title, router, deleteDraftMutate, draft.id]);
+
+  const discardDraft = useCallback(() => {
+    suppressFlushRef.current = true;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    deleteDraftMutate(draft.id);
+    router.push("/");
+  }, [deleteDraftMutate, draft.id, router]);
 
   // Keeps ⌘↵ bound to one listener instead of resubscribing on every render.
   const advanceRef = useRef(() => {});
@@ -283,7 +508,7 @@ export function NewNovelWizard() {
             : "Waiting on the AI."
         : step === 2
           ? "All of it stays editable later."
-          : "Nothing has been saved yet.";
+          : "Creating turns this draft into the novel.";
 
   // No ambient glow behind the chrome: a glow is a shadow by another name, and
   // the page is lit by its own ground.
@@ -302,6 +527,7 @@ export function NewNovelWizard() {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            <DraftStatus state={saveState} />
             <span className="hidden text-xs tabular-nums text-muted-foreground sm:block">
               Step {step + 1} of {STEPS.length}
             </span>
@@ -484,20 +710,56 @@ export function NewNovelWizard() {
       <AlertDialog open={exitOpen} onOpenChange={setExitOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave without creating?</AlertDialogTitle>
+            <AlertDialogTitle>Step away for now?</AlertDialogTitle>
             <AlertDialogDescription>
-              Nothing has been saved yet, so this premise and everything the AI
-              worked out from it will be lost.
+              This draft saves itself as you work — the premise and everything
+              the AI worked out from it will be waiting right here. Discard it
+              only if this novel is not happening.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep working</AlertDialogCancel>
+            <Button variant="outline" onClick={discardDraft}>
+              Discard draft
+            </Button>
             <AlertDialogAction onClick={() => router.push("/")}>
-              Discard
+              Save &amp; leave
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/**
+ * The autosave's word to the author. Silent until there is a draft to speak
+ * of, then one quiet eyebrow line in the header: the affirm tick is the "your
+ * work is safe" the exit dialog used to have to deny.
+ */
+function DraftStatus({ state }: { state: DraftSaveState }) {
+  return (
+    <p
+      aria-live="polite"
+      className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.2em] transition-colors"
+    >
+      {state === "saving" ? (
+        <>
+          <RiLoader4Line className="size-3 animate-spin text-muted-foreground" />
+          <span className="text-muted-foreground">Saving</span>
+        </>
+      ) : state === "saved" ? (
+        <>
+          <RiCheckLine className="size-3 text-affirm" />
+          <span className="text-affirm">Draft saved</span>
+        </>
+      ) : (
+        <>
+          {/* A square dot, because nothing in this house is round. */}
+          <span aria-hidden className="size-1.5 bg-caution" />
+          <span className="text-muted-foreground">Unsaved</span>
+        </>
+      )}
+    </p>
   );
 }

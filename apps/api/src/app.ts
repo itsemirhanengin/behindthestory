@@ -15,6 +15,7 @@ import { billingRoutes, billingWebhookRoutes } from "#routes/billing";
 import { chapterRoutes } from "#routes/chapters";
 import { entityRoutes } from "#routes/entities";
 import { novelContentRoutes } from "#routes/novel-content";
+import { novelDraftRoutes } from "#routes/novel-drafts";
 import { novelMergeRoutes } from "#routes/novel-merge";
 import { novelSearchRoutes } from "#routes/novel-search";
 import { novelTimelineRoutes } from "#routes/novel-timeline";
@@ -36,6 +37,9 @@ const routes = new Hono()
   .route("/api/billing", billingWebhookRoutes)
   .route("/api/billing", billingRoutes)
   .route("/api/workspaces", workspaceRoutes)
+  // Its own segment, not `/api/novels/draft`: the novels router's `/:novelId`
+  // routes are mounted on that path and would swallow "draft" as an id.
+  .route("/api/novel-drafts", novelDraftRoutes)
   .route("/api/novels", novelRoutes)
   .route("/api/novels", novelTimelineRoutes)
   .route("/api/novels", novelSearchRoutes)

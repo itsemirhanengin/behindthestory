@@ -208,6 +208,60 @@ export const novels = pgTable(
   (t) => [index("novels_workspace_idx").on(t.workspaceId)],
 );
 
+/**
+ * The new-novel wizard's work in progress, one row per unfinished novel.
+ *
+ * The wizard used to hold everything in client state until the final step, so
+ * a closed tab took the premise — and the AI reading the workspace had already
+ * paid for — with it. This row is that state, snapshotted whole on a debounce.
+ * "New novel" mints a row and the wizard lives at its id, so an author can
+ * keep any number of novels half-described at once. It hangs off the user
+ * rather than a workspace because it is pre-novel scratch: nothing here is
+ * shared, billed, or reachable by anyone else, and the workspace edge is only
+ * decided at publish, by `POST /api/novels`.
+ *
+ * The jsonb columns are deliberately untyped at this layer. Their shapes
+ * (`Reading`, `StyleFields`, …) live in `@behindthestory/core/onboarding`,
+ * which imports types from this file — typing them here would close that
+ * cycle. The API route validates them with zod schemas that `satisfies` the
+ * core types, so drift still fails the build, just one package over.
+ */
+export const novelDrafts = pgTable(
+  "novel_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** Where the author stood, so a restore reopens the same step. */
+    step: integer("step").notNull().default(0),
+    maxStep: integer("max_step").notNull().default(0),
+
+    title: text("title").notNull().default(""),
+    /** Whether the title came from the AI's suggestions — keeps the badge honest. */
+    titleFromAi: boolean("title_from_ai").notNull().default(false),
+    description: text("description").notNull().default(""),
+
+    /** The AI's `Reading`, null until step two has run. */
+    reading: jsonb("reading"),
+    readingRevision: integer("reading_revision").notNull().default(0),
+    /** `WizardTurn[]` — the correction history behind the current reading. */
+    turns: jsonb("turns").notNull().default([]),
+
+    /** `StyleFields` as the author has edited them, null until step three. */
+    style: jsonb("style"),
+    /** The untouched `StyleProposal`, kept so rationales survive a restore. */
+    styleProposal: jsonb("style_proposal"),
+    /** Which reading revision the style derives from; -1 means none yet. */
+    styleFrom: integer("style_from").notNull().default(-1),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [index("novel_drafts_user_idx").on(t.userId)],
+);
+
 export const characters = pgTable(
   "characters",
   {
@@ -863,6 +917,7 @@ export const aiSuggestionFeedback = pgTable(
 );
 
 export type Novel = typeof novels.$inferSelect;
+export type NovelDraft = typeof novelDrafts.$inferSelect;
 export type Character = typeof characters.$inferSelect;
 export type Relationship = typeof relationships.$inferSelect;
 export type StoryEvent = typeof storyEvents.$inferSelect;

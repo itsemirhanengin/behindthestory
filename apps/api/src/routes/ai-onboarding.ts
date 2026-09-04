@@ -23,8 +23,11 @@ import { openMeter } from "#lib/billing/meter";
  * `satisfies` rather than a bare annotation: the concrete zod type is what the
  * SDK needs to build a JSON schema, while the check makes a drift between this
  * schema and the wizard's `Reading` type a compile error.
+ *
+ * Exported because the draft route stores these same shapes as jsonb and
+ * validates them with the exact schema that produced them.
  */
-const readingSchema = z.object({
+export const readingSchema = z.object({
   titleSuggestions: z
     .array(z.string())
     .describe(
@@ -72,7 +75,7 @@ const readingSchema = z.object({
     ),
 }) satisfies z.ZodType<Reading>;
 
-const styleSchema = z.object({
+export const styleSchema = z.object({
   genre: z.string().describe("Genre and subgenre, e.g. 'literary thriller'"),
   tone: z.string().describe("Three to five mood descriptors, comma separated"),
   pov: z.enum(POV_VALUES),
