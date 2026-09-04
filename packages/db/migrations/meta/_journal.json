@@ -57,6 +57,13 @@
       "when": 1788522885736,
       "tag": "0007_military_mongu",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788545936172,
+      "tag": "0008_cheerful_madame_masque",
+      "breakpoints": true
     }
   ]
 }

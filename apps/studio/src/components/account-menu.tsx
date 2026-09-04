@@ -129,7 +129,10 @@ export function AccountMenu() {
           disabled={signOut.isPending}
           onSelect={() =>
             signOut.mutate(undefined, {
-              onSuccess: () => router.refresh(),
+              // Straight to the door rather than `router.refresh()`: the page
+              // behind this menu is signed-in-only, so refreshing it would
+              // only bounce off the proxy on the way to the same place.
+              onSuccess: () => router.replace("/sign-in"),
               onError: (error) => toast.error(error.message),
             })
           }

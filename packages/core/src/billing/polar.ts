@@ -1,18 +1,22 @@
+import { isIP } from "node:net";
+
 import { Polar } from "@polar-sh/sdk";
 import { eq } from "drizzle-orm";
 import { Webhook } from "standardwebhooks";
 import { z } from "zod";
 
 import { billingCustomers, getDb } from "@behindthestory/db";
-import { isPlanSlug, type PlanSlug } from "../plans";
+import { isPlanSlug, type PaidPlanSlug, type PlanSlug } from "../plans";
 
 import { productIdForPlan, productIdForTopup, resolveProduct } from "./products";
 import type {
   BillingProvider,
   CheckoutRequest,
+  PlanChangeRequest,
   PortalRequest,
   ProviderCustomerState,
   ProviderEvent,
+  ProviderOrder,
 } from "./provider";
 
 /**
@@ -33,6 +37,121 @@ import type {
 export class WebhookVerificationError extends Error {}
 
 /**
+ * The access token is real but is not allowed to do this.
+ *
+ * A setup problem wearing the clothes of a server error. Polar answers 403
+ * `insufficient_scope` and names the scope it wanted, and left alone that
+ * became a bare "Internal error" in the studio — which tells the writer their
+ * upgrade is broken and tells whoever deployed it nothing at all. Its own
+ * class so the route can say which scope is missing, the way
+ * `BillingNotConfiguredError` already does for a missing product id.
+ */
+export class ProviderPermissionError extends Error {
+  constructor(readonly scope: string) {
+    super(
+      `The Polar access token is missing the \`${scope}\` scope. Add it to the token in Polar (Settings → Developers), then restart the API.`,
+    );
+    this.name = "ProviderPermissionError";
+  }
+}
+
+/**
+ * The plan cannot change because the subscription is on its way out.
+ *
+ * Polar refuses any product change once a cancellation is scheduled, which is
+ * reasonable — the plan it would change to is one nobody will be billed for.
+ * It is also not an error in any sense the writer caused: the answer is to
+ * keep the subscription first, and then change it.
+ */
+export class SubscriptionCanceledError extends Error {
+  constructor() {
+    super(
+      "This subscription is set to end, so its plan cannot be changed. Keep the plan first, then change it.",
+    );
+    this.name = "SubscriptionCanceledError";
+  }
+}
+
+/**
+ * Digs a 403 out of whatever the SDK threw.
+ *
+ * Not an `instanceof` check on an SDK error class, because the SDK does not
+ * reliably produce one here: its generated response validator has no schema
+ * for an `insufficient_scope` body, so the 403 surfaces as a *validation*
+ * failure with the real status buried in `cause`. Walking the chain for a
+ * status and a scope is what survives that.
+ */
+/**
+ * Where the provider's own words might be, on any of the error shapes the SDK
+ * throws.
+ *
+ * Two were observed for the very same call: a typed `AlreadyCanceledSubscription`
+ * whose reason is in `name`, `error` and `detail`, and a
+ * `ResponseValidationError` whose `message` is only "Response validation
+ * failed" and whose reason is in `body` — with `body$` appearing on a third
+ * shape. Naming one field and hoping is how this silently stopped working, so
+ * read all of them and let the answer be found wherever it is.
+ */
+const REASON_FIELDS = ["body", "body$", "message", "detail", "error", "name"] as const;
+
+function failureDetail(
+  error: unknown,
+  depth = 0,
+): { status: number | null; text: string } {
+  if (depth > 4 || typeof error !== "object" || error === null) {
+    return { status: null, text: "" };
+  }
+
+  const candidate = error as Record<string, unknown> & {
+    rawResponse?: { status?: number; headers?: { get?: (n: string) => string | null } };
+    cause?: unknown;
+  };
+
+  const status =
+    [candidate.statusCode, candidate.status, candidate.rawResponse?.status].find(
+      (value): value is number => typeof value === "number",
+    ) ?? null;
+
+  const parts = REASON_FIELDS.map((field) =>
+    typeof candidate[field] === "string" ? (candidate[field] as string) : "",
+  );
+  parts.push(candidate.rawResponse?.headers?.get?.("www-authenticate") ?? "");
+
+  /* Always walk the whole chain, even once a status is in hand: the SDK's
+     wrapper carries the status while the reason can sit in the `cause` below
+     it. */
+  const deeper = failureDetail(candidate.cause, depth + 1);
+  return {
+    status: status ?? deeper.status,
+    text: `${parts.join(" ")} ${deeper.text}`,
+  };
+}
+
+/**
+ * Re-throws a provider refusal as something a person can act on.
+ *
+ * The status alone is not the diagnosis, which is what the first version of
+ * this got wrong. Polar answers 403 for a missing scope *and* for
+ * `AlreadyCanceledSubscription`, so keying off the code alone told a writer
+ * whose subscription was simply pending cancellation to go and edit an API
+ * token. Only the words `insufficient_scope` mean a scope problem.
+ */
+function rethrowProviderFailure(error: unknown, fallbackScope: string): never {
+  const { text } = failureDetail(error);
+
+  if (text.includes("insufficient_scope")) {
+    // The header states the scope it wanted; fall back to the caller's guess.
+    throw new ProviderPermissionError(/scope="([^"]+)"/.exec(text)?.[1] ?? fallbackScope);
+  }
+
+  if (text.includes("AlreadyCanceledSubscription")) {
+    throw new SubscriptionCanceledError();
+  }
+
+  throw error;
+}
+
+/**
  * Only the fields acted on, everything else passed over.
  *
  * Deliberately permissive: Polar sends far more than this and will send more
@@ -47,6 +166,14 @@ const eventShape = z.object({
       external_id: z.string().nullish(),
       product_id: z.string().nullish(),
       customer: z.object({ external_id: z.string().nullish() }).nullish(),
+      /* Refunds only. They carry no `external_id` at all — a refund names an
+         order and a customer id, so the workspace is reached by reading the
+         order back. */
+      status: z.string().nullish(),
+      order_id: z.string().nullish(),
+      amount: z.number().nullish(),
+      currency: z.string().nullish(),
+      reason: z.string().nullish(),
     })
     .loose(),
 });
@@ -88,9 +215,68 @@ function planFromProduct(productId: string): PlanSlug | null {
   return resolved?.type === "plan" && isPlanSlug(resolved.plan) ? resolved.plan : null;
 }
 
+/**
+ * An address, or nothing at all — never a word standing in for one.
+ *
+ * `clientIp` answers `"unknown"` when there is no proxy header, which is the
+ * right bucket key for a rate limiter and is not an address. Polar validates
+ * this field and rejects the entire checkout over it, so every request without
+ * an `x-forwarded-for` — which is every local one — failed at the provider
+ * with a validation error that mentions none of this. Sending nothing is
+ * allowed; the field only exists so the provider geolocates the buyer rather
+ * than our server, and a wrong answer there is worse than no answer.
+ */
+function ipAddressOrNothing(value: string | null | undefined): string | undefined {
+  return value && isIP(value) ? value : undefined;
+}
+
 function toDate(value: Date | string | null | undefined): Date | null {
   if (!value) return null;
   return value instanceof Date ? value : new Date(value);
+}
+
+/**
+ * The plan change Polar has scheduled for the next period, if any.
+ *
+ * A second request, because the customer-state payload — where every other
+ * field here comes from — does not carry `pending_update`. Worth the round
+ * trip: it makes a scheduled downgrade the provider's fact rather than our
+ * bookkeeping, so it corrects itself on every sync instead of drifting. The
+ * alternative is what this replaced, where an upgrade left a stale "Starter
+ * from 4 October" note on the page for a downgrade Polar had already
+ * cancelled.
+ *
+ * Returns an empty object when it cannot be read at all — never `null`, which
+ * would claim there is nothing scheduled. See `pendingPlanSlug` on
+ * `ProviderCustomerState` for why those two must stay distinguishable.
+ */
+async function scheduledChange(
+  subscriptionId: string,
+  liveProductId: string,
+): Promise<{ pendingPlanSlug?: PlanSlug | null; pendingPlanAt?: Date | null }> {
+  let subscription;
+  try {
+    subscription = await polar().subscriptions.get({ id: subscriptionId });
+  } catch {
+    // Deliberately quiet and deliberately non-fatal: a plan the writer can
+    // still see beats a billing page that will not load.
+    return {};
+  }
+
+  const pending = subscription.pendingUpdate;
+
+  /* Polar records an update even when it names the product already in force —
+     which is exactly what our own "stay on this plan" does, since superseding
+     a schedule means sending another one. That is the absence of a change, not
+     a change to the same thing. */
+  if (!pending?.productId || pending.productId === liveProductId) {
+    return { pendingPlanSlug: null, pendingPlanAt: null };
+  }
+
+  return {
+    pendingPlanSlug: planFromProduct(pending.productId),
+    pendingPlanAt: toDate(pending.appliesAt),
+  };
 }
 
 async function rememberCustomer(workspaceId: string, customerId: string) {
@@ -109,7 +295,7 @@ export const polarProvider: BillingProvider = {
   async createCheckout(request: CheckoutRequest) {
     const productId =
       request.item.type === "plan"
-        ? productIdForPlan(request.item.plan as Exclude<PlanSlug, "free">)
+        ? productIdForPlan(request.item.plan as PaidPlanSlug)
         : productIdForTopup(request.item.pack);
 
     const checkout = await polar().checkouts.create({
@@ -118,7 +304,7 @@ export const polarProvider: BillingProvider = {
       // webhook resolvable without a lookup table.
       externalCustomerId: request.workspaceId,
       customerEmail: request.customerEmail,
-      customerIpAddress: request.customerIp ?? undefined,
+      customerIpAddress: ipAddressOrNothing(request.customerIp),
       successUrl: request.successUrl,
       metadata: { workspaceId: request.workspaceId },
     });
@@ -144,14 +330,118 @@ export const polarProvider: BillingProvider = {
     return { url: session.customerPortalUrl };
   },
 
+  /**
+   * Moves a subscription to another product.
+   *
+   * `invoice` settles the difference on the spot: the unused remainder of the
+   * old plan is credited against the new plan's charge, so the writer sees one
+   * net movement rather than a refund followed by a charge — two lines on a
+   * statement that read as a billing mistake. Polar makes the change
+   * contingent on that payment succeeding, so a declined card leaves the
+   * subscription exactly as it was rather than half-changed.
+   *
+   * `next_period` moves no money and applies nothing today; it rewrites what
+   * the renewal will charge. A pending change is superseded by the next
+   * request rather than queued behind it, which is what makes changing one's
+   * mind twice harmless.
+   *
+   * Both preserve the billing anchor — only Polar's `reset` starts a fresh
+   * cycle, and a plan change that silently moved someone's renewal date would
+   * be the least explainable thing on the billing page.
+   */
+  async changePlan(request: PlanChangeRequest) {
+    try {
+      await polar().subscriptions.update({
+        id: request.subscriptionId,
+        subscriptionUpdate: {
+          productId: productIdForPlan(request.plan),
+          prorationBehavior: request.when === "now" ? "invoice" : "next_period",
+        },
+      });
+    } catch (error) {
+      rethrowProviderFailure(error, "subscriptions:write");
+    }
+  },
+
+  async revokeSubscription(subscriptionId: string) {
+    try {
+      await polar().subscriptions.revoke({ id: subscriptionId });
+    } catch (error) {
+      rethrowProviderFailure(error, "subscriptions:write");
+    }
+  },
+
+  /**
+   * Calls off a cancellation that has not taken effect yet.
+   *
+   * Cancelling itself stays in the provider's portal — it owns the flow, the
+   * receipt and the wording — but coming back has to be possible from here.
+   * Somebody who cancelled and thought better of it should not have to find
+   * their way through a billing portal to undo it, and the portal is where
+   * they just were when they changed their mind.
+   */
+  async resumeSubscription(subscriptionId: string) {
+    try {
+      await polar().subscriptions.update({
+        id: subscriptionId,
+        subscriptionUpdate: { cancelAtPeriodEnd: false },
+      });
+    } catch (error) {
+      rethrowProviderFailure(error, "subscriptions:write");
+    }
+  },
+
+  async getOrder(orderId: string): Promise<ProviderOrder | null> {
+    let order;
+    try {
+      order = await polar().orders.get({ id: orderId });
+    } catch (error) {
+      // An order we cannot see is not an order that does not exist; only a
+      // 404 means that, and anything else has to be loud — a refund silently
+      // skipped is a plan nobody is paying for.
+      if (failureDetail(error).status === 404) return null;
+      rethrowProviderFailure(error, "orders:read");
+    }
+
+    return {
+      id: order.id,
+      externalId: order.customer?.externalId ?? null,
+      productId: order.productId ?? null,
+      subscriptionId: order.subscriptionId ?? null,
+      totalAmount: order.totalAmount,
+      refundedAmount: order.refundedAmount,
+      /**
+       * Polar's own verdict rather than our arithmetic. Comparing amounts
+       * would have to account for tax, discounts and an applied balance
+       * separately, and get all three right to reach the conclusion the
+       * provider has already published.
+       */
+      fullyRefunded: order.status === "refunded",
+      currency: order.currency,
+      createdAt: toDate(order.createdAt) ?? new Date(),
+    };
+  },
+
   async getCustomerState(workspaceId: string): Promise<ProviderCustomerState | null> {
     let state;
     try {
       state = await polar().customers.getStateExternal({ externalId: workspaceId });
-    } catch {
-      // A workspace that has never checked out has no Polar customer, which is
-      // a 404 rather than a failure.
-      return null;
+    } catch (error) {
+      /**
+       * A workspace that has never checked out has no Polar customer, which is
+       * a 404 rather than a failure — that one answer is legitimately "no
+       * subscription".
+       *
+       * Everything else must throw. This used to swallow every error and
+       * report `null`, which `syncWorkspaceFromProvider` reads as "not
+       * entitled": an under-scoped token or an hour of Polar downtime would
+       * therefore delete the subscription row and drop the workspace to Free
+       * — silently, and for every paying workspace at once, since the nightly
+       * reconcile runs this over all of them. Failing loudly leaves the last
+       * known plan in place, which is the safe direction.
+       */
+      if (failureDetail(error).status === 404) return null;
+      rethrowProviderFailure(error, "customers:read");
     }
 
     await rememberCustomer(workspaceId, state.id);
@@ -163,6 +453,8 @@ export const polarProvider: BillingProvider = {
         (toDate(b.currentPeriodStart)?.getTime() ?? 0) -
         (toDate(a.currentPeriodStart)?.getTime() ?? 0),
     )[0];
+
+    const scheduled = active ? await scheduledChange(active.id, active.productId) : {};
 
     return {
       customerId: state.id,
@@ -176,6 +468,7 @@ export const polarProvider: BillingProvider = {
             currentPeriodStart: toDate(active.currentPeriodStart),
             currentPeriodEnd: toDate(active.currentPeriodEnd),
             cancelAtPeriodEnd: Boolean(active.cancelAtPeriodEnd),
+            ...scheduled,
           }
         : null,
     };
@@ -246,6 +539,30 @@ export const polarProvider: BillingProvider = {
         return {
           kind: "subscription_ended",
           externalId: data.customer?.external_id ?? "",
+        };
+
+      /**
+       * A refund arrives twice — once as created, again as updated when it
+       * settles — and only `succeeded` means the money has actually moved. A
+       * `pending` refund can still fail, and a workspace that lost its plan
+       * for a refund that never completed would have paid and got nothing.
+       *
+       * Both types funnel into one event because the handler is idempotent on
+       * the refund id: whichever delivery arrives first with `succeeded` does
+       * the work, and the other is a no-op.
+       */
+      case "refund.created":
+      case "refund.updated":
+        if (data.status !== "succeeded") {
+          return { kind: "ignored", type: `${type}:${data.status ?? "unknown"}` };
+        }
+        return {
+          kind: "refund_succeeded",
+          refundId: data.id ?? "",
+          orderId: data.order_id ?? "",
+          amount: data.amount ?? 0,
+          currency: data.currency ?? "usd",
+          reason: data.reason ?? "",
         };
 
       default:

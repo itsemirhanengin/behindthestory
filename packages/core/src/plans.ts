@@ -101,6 +101,32 @@ export function planFor(slug: string | null | undefined): Plan {
   return isPlanSlug(slug) ? PLANS[slug] : FREE_PLAN;
 }
 
+/** The plans that can actually be subscribed to. Free is the absence of one. */
+export type PaidPlanSlug = Exclude<PlanSlug, "free">;
+
+export function isPaidPlanSlug(value: string | null | undefined): value is PaidPlanSlug {
+  return isPlanSlug(value) && value !== "free";
+}
+
+/**
+ * Which direction a plan change goes, by price.
+ *
+ * The direction is not cosmetic: it decides when the change takes effect and
+ * whether money moves today. Price rather than allowance is the test, because
+ * price is what the writer is agreeing to — a plan that cost more for fewer
+ * words would still be an upgrade in the only sense that matters here.
+ */
+export function planChangeDirection(
+  from: PlanSlug,
+  to: PlanSlug,
+): "upgrade" | "downgrade" | "same" {
+  const before = PLANS[from].priceCents;
+  const after = PLANS[to].priceCents;
+  if (after > before) return "upgrade";
+  if (after < before) return "downgrade";
+  return "same";
+}
+
 /**
  * Which model a prose generation actually runs on.
  *

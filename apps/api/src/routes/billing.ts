@@ -4,12 +4,17 @@ import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { aiGenerations, billingSubscriptions, getDb } from "@behindthestory/db";
+import {
+  aiGenerations,
+  billingRefunds,
+  billingSubscriptions,
+  getDb,
+} from "@behindthestory/db";
 import {
   PLAN_SLUGS,
   TOPUP_KEYS,
   planFor,
-  type PlanSlug,
+  type PaidPlanSlug,
 } from "@behindthestory/core/plans";
 import { ensureBalance, readBalance } from "@behindthestory/core/word-balance";
 
@@ -19,9 +24,14 @@ import { assertMember, assertWorkspaceAdmin } from "#lib/auth/workspace";
 import {
   applyProviderEvent,
   billingCatalogue,
+  changeWorkspacePlan,
   claimWebhookDelivery,
   isBillingConfigured,
+  NoSubscriptionError,
   polarProvider,
+  ProviderPermissionError,
+  resumeWorkspaceSubscription,
+  SubscriptionCanceledError,
   syncWorkspaceFromProvider,
   WebhookVerificationError,
 } from "@behindthestory/core/billing";
@@ -33,16 +43,43 @@ function appUrl(path: string): string {
   return new URL(path, base).toString();
 }
 
+// Free is not purchasable — it is what you have when you have nothing.
+const PAID_PLANS = PLAN_SLUGS.filter((s): s is PaidPlanSlug => s !== "free");
+
 const checkoutSchema = z.object({
   item: z.discriminatedUnion("type", [
-    z.object({
-      type: z.literal("plan"),
-      // Free is not purchasable — it is what you have when you have nothing.
-      plan: z.enum(PLAN_SLUGS.filter((s): s is Exclude<PlanSlug, "free"> => s !== "free")),
-    }),
+    z.object({ type: z.literal("plan"), plan: z.enum(PAID_PLANS) }),
     z.object({ type: z.literal("topup"), pack: z.enum(TOPUP_KEYS) }),
   ]),
 });
+
+const planChangeSchema = z.object({ plan: z.enum(PAID_PLANS) });
+
+/**
+ * Turns the billing layer's refusals into answers a client can act on.
+ *
+ * Each of these is a legitimate state rather than a fault, and each used to
+ * arrive as a bare 500 — which in the studio reads as "the app is broken"
+ * exactly when the writer is trying to give us money.
+ */
+function asHttpError(error: unknown): HTTPException {
+  // Nothing to change means nothing is wrong — they have to buy one first.
+  if (error instanceof NoSubscriptionError) {
+    return new HTTPException(409, { message: error.message });
+  }
+  // A dead end until the cancellation is called off, which the studio offers.
+  if (error instanceof SubscriptionCanceledError) {
+    return new HTTPException(409, { message: error.message });
+  }
+  /* A deployment problem, not a bug: say which scope is missing rather than
+     answering "Internal error" to somebody clicking Upgrade. 503 because the
+     request was sound and the service cannot serve it yet. */
+  if (error instanceof ProviderPermissionError) {
+    console.error("[billing] Polar refused the request:", error.message);
+    return new HTTPException(503, { message: error.message });
+  }
+  throw error;
+}
 
 /**
  * Everything that touches money.
@@ -99,6 +136,31 @@ export const billingRoutes = new Hono<AuthEnv>()
       .select()
       .from(billingSubscriptions)
       .where(eq(billingSubscriptions.workspaceId, workspaceId));
+
+    /**
+     * The most recent refund, and only if it changed anything.
+     *
+     * Polar mails its own receipt, so this is not here to announce the money —
+     * it is here to explain the plan. Somebody who finds themselves on Free
+     * without having cancelled needs the reason on the page that shows the
+     * consequence, and a partial refund that deliberately left the month alone
+     * would only confuse that story.
+     */
+    const [refund] = await getDb()
+      .select({
+        amount: billingRefunds.amount,
+        currency: billingRefunds.currency,
+        createdAt: billingRefunds.createdAt,
+      })
+      .from(billingRefunds)
+      .where(
+        and(
+          eq(billingRefunds.workspaceId, workspaceId),
+          eq(billingRefunds.fullyRefunded, true),
+        ),
+      )
+      .orderBy(desc(billingRefunds.createdAt))
+      .limit(1);
 
     // What the words went on this period — the question the balance alone
     // never answers.
@@ -162,8 +224,14 @@ export const billingRoutes = new Hono<AuthEnv>()
             status: subscription.status,
             cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
             currentPeriodEnd: subscription.currentPeriodEnd,
+            /* A downgrade the writer has asked for and not yet received. The
+               page owes them both halves: what they have until then, and what
+               they will have after. */
+            pendingPlanSlug: subscription.pendingPlanSlug,
+            pendingPlanAt: subscription.pendingPlanAt,
           }
         : null,
+      refund: refund ?? null,
       usage: byRoute,
       economics: {
         usdCost: Number(economics?.usdCost ?? 0),
@@ -194,6 +262,48 @@ export const billingRoutes = new Hono<AuthEnv>()
     const { planSlug } = await syncWorkspaceFromProvider(provider, workspaceId);
     return c.json({ synced: true, planSlug });
   })
+  /**
+   * Moving between plans, for a workspace that already has a subscription.
+   *
+   * Deliberately not checkout. Checking out again while a subscription is live
+   * opens a second one at the provider, which then bills both — and our
+   * reading of the customer state keeps only the newest, so the duplicate is
+   * invisible here and visible on the card. Whether the change lands today or
+   * at the renewal is decided by direction, in the core.
+   */
+  .post("/:workspaceId/plan", zValidator("json", planChangeSchema), async (c) => {
+    const workspaceId = c.req.param("workspaceId");
+    await assertWorkspaceAdmin(c.get("user").id, workspaceId);
+
+    try {
+      return c.json(
+        await changeWorkspacePlan(provider, {
+          workspaceId,
+          plan: c.req.valid("json").plan,
+        }),
+      );
+    } catch (error) {
+      throw asHttpError(error);
+    }
+  })
+  /**
+   * Calls off a cancellation the writer has changed their mind about.
+   *
+   * Separate from the plan endpoint because it is not a plan change — the plan
+   * is already theirs; what moves is whether it survives the period boundary.
+   * The provider refuses plan changes while a cancellation is pending, so this
+   * is also the door that has to be opened before that endpoint works again.
+   */
+  .post("/:workspaceId/resume", async (c) => {
+    const workspaceId = c.req.param("workspaceId");
+    await assertWorkspaceAdmin(c.get("user").id, workspaceId);
+
+    try {
+      return c.json(await resumeWorkspaceSubscription(provider, workspaceId));
+    } catch (error) {
+      throw asHttpError(error);
+    }
+  })
   .post("/:workspaceId/checkout", zValidator("json", checkoutSchema), async (c) => {
     const workspaceId = c.req.param("workspaceId");
     // Buying is an owner/admin action; a member should not be able to put a
@@ -201,6 +311,23 @@ export const billingRoutes = new Hono<AuthEnv>()
     await assertWorkspaceAdmin(c.get("user").id, workspaceId);
 
     const { item } = c.req.valid("json");
+
+    /* The guard rather than a convention the client is trusted to follow: a
+       second subscription is charged monthly and shows up nowhere in this app,
+       so it must not be reachable by a stale tab or a retried click. */
+    if (item.type === "plan") {
+      const [existing] = await getDb()
+        .select({ id: billingSubscriptions.providerSubscriptionId })
+        .from(billingSubscriptions)
+        .where(eq(billingSubscriptions.workspaceId, workspaceId));
+
+      if (existing) {
+        throw new HTTPException(409, {
+          message:
+            "This workspace already subscribes to a plan. Change the plan instead of buying a second one.",
+        });
+      }
+    }
     const { url } = await provider.createCheckout({
       workspaceId,
       customerEmail: c.get("user").email,

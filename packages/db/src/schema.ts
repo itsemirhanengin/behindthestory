@@ -853,7 +853,59 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),
   cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  /**
+   * A downgrade the writer has asked for that has not happened yet.
+   *
+   * Recorded on our side rather than read back from the provider: a scheduled
+   * change is not part of the customer-state payload every other field here
+   * comes from, and the billing page has to be able to say "Starter from 3
+   * September" the moment the writer clicks — not once a webhook has been and
+   * gone. Cleared by the sync when the period rolls over and the live plan
+   * finally matches.
+   */
+  pendingPlanSlug: text("pending_plan_slug"),
+  pendingPlanAt: timestamp("pending_plan_at"),
   updatedAt: updatedAtColumn(),
+});
+
+/**
+ * Money given back, keyed by the provider's own refund id.
+ *
+ * Two jobs, and neither is served by the webhook-delivery table above. First,
+ * idempotency at the level of the *decision* rather than the delivery: one
+ * refund arrives as `refund.created` and again as `refund.updated`, which are
+ * separate deliveries with separate ids, and revoking a subscription twice or
+ * clawing back the same words twice must not be possible. Second, it is what
+ * lets the billing page say "$14.00 returned on 4 September" — a sentence the
+ * provider knows and we would otherwise have to ask it for on every page load.
+ *
+ * Only refunds that actually succeeded are recorded. A pending one may still
+ * fail, and a row here is taken to mean the money has moved.
+ */
+export const billingRefunds = pgTable("billing_refunds", {
+  /** The provider's refund id. */
+  id: text("id").primaryKey(),
+  provider: text("provider").notNull().default("polar"),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  providerOrderId: text("provider_order_id").notNull(),
+  /** Null for a top-up pack, which has no subscription behind it. */
+  providerSubscriptionId: text("provider_subscription_id"),
+  /** Minor units, as the provider counts them. */
+  amount: integer("amount").notNull(),
+  currency: text("currency").notNull().default("usd"),
+  /** The provider's word for why — `customer_request`, `dispute`, `other`. */
+  reason: text("reason").notNull().default(""),
+  /**
+   * Whether this refund emptied the order or only part of it. The distinction
+   * decides everything: a full refund of the current period ends access, a
+   * partial one is a gesture that leaves the month alone.
+   */
+  fullyRefunded: boolean("fully_refunded").notNull(),
+  /** What we did about it, for support to read back without guessing. */
+  outcome: text("outcome").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 /**
@@ -1003,3 +1055,4 @@ export type WordLedgerReason = (typeof WORD_LEDGER_REASONS)[number];
 export type UsageSource = (typeof USAGE_SOURCE_VALUES)[number];
 export type BillingCustomer = typeof billingCustomers.$inferSelect;
 export type BillingSubscription = typeof billingSubscriptions.$inferSelect;
+export type BillingRefund = typeof billingRefunds.$inferSelect;

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { RiArrowLeftLine, RiBookOpenLine, RiLoader4Line } from "@remixicon/react";
 
@@ -12,8 +12,27 @@ import { useRequestCode, useVerifyCode } from "@/lib/queries/session";
 
 type Step = "email" | "code";
 
+/** `useSearchParams` opts the form out of prerendering, so the boundary is
+ *  what keeps the page's own shell static. */
 export default function SignInPage() {
+  return (
+    <Suspense fallback={<Shell />}>
+      <SignInForm />
+    </Suspense>
+  );
+}
+
+function SignInForm() {
   const router = useRouter();
+  const params = useSearchParams();
+  /* Where the proxy turned them away from, so a bookmarked chapter opens as a
+     chapter once they are back in. Anything that is not a path on this origin
+     is discarded — otherwise `?next=` is an open redirect. */
+  const next = params.get("next");
+  const returnTo =
+    next?.startsWith("/") && !next.startsWith("//") ? next : "/";
+  /** They did not come here by choice: their session ended under them. */
+  const expired = params.has("expired");
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -51,7 +70,7 @@ export default function SignInPage() {
       { email: email.trim(), code: value },
       {
         onSuccess: () => {
-          router.replace("/");
+          router.replace(returnTo);
           router.refresh();
         },
         onError: (error) => {
@@ -74,13 +93,17 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-6 py-16">
-      <div className="w-full max-w-sm">
-        <h1 className="flex items-center gap-2.5 font-heading text-2xl font-semibold tracking-tight">
-          <RiBookOpenLine className="size-6 text-primary" /> BehindTheStory
-        </h1>
+    <Shell>
+      {/* Said plainly and once: nobody clicked "sign out", the session simply
+          ran out, and the work is where they left it. */}
+      {expired && (
+        <p className="mt-6 border-l-2 border-primary/40 pl-3 text-sm/6 text-muted-foreground">
+          Your session has ended. Sign in again and you&apos;ll be taken back to
+          where you were.
+        </p>
+      )}
 
-        {step === "email" ? (
+      {step === "email" ? (
           <form
             className="mt-8"
             onSubmit={(event) => {
@@ -165,6 +188,20 @@ export default function SignInPage() {
             )}
           </div>
         )}
+    </Shell>
+  );
+}
+
+/** The masthead and the column, shared by the form and by the boundary above
+ *  it so the page does not jump once the search params arrive. */
+function Shell({ children }: { children?: React.ReactNode }) {
+  return (
+    <main className="flex min-h-dvh items-center justify-center px-6 py-16">
+      <div className="w-full max-w-sm">
+        <h1 className="flex items-center gap-2.5 font-heading text-2xl font-semibold tracking-tight">
+          <RiBookOpenLine className="size-6 text-primary" /> BehindTheStory
+        </h1>
+        {children}
       </div>
     </main>
   );

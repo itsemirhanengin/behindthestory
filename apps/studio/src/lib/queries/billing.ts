@@ -80,6 +80,37 @@ export function useStartCheckout(workspaceId: string | undefined) {
   });
 }
 
+export type PlanChangeInput = InferRequestType<
+  (typeof rpc.api.billing)[":workspaceId"]["plan"]["$post"]
+>["json"];
+
+/**
+ * Moves an existing subscription between plans.
+ *
+ * Separate from `useStartCheckout` because it is a different act: checkout
+ * takes somebody who is paying nothing to a hosted page, while this changes an
+ * agreement that already exists, in place, with no redirect. Sending a
+ * subscriber through checkout would open a second subscription and bill both.
+ */
+export function useChangePlan(workspaceId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (plan: PlanChangeInput["plan"]) => {
+      const res = await rpc.api.billing[":workspaceId"].plan.$post({
+        param: { workspaceId: workspaceId! },
+        json: { plan },
+      });
+      if (!res.ok) throw await apiError(res);
+      return res.json();
+    },
+    onSuccess: () => {
+      // The allowance moves with an upgrade, and the rail shows it.
+      queryClient.invalidateQueries({ queryKey: keys.billing(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: keys.workspaces });
+    },
+  });
+}
+
 /**
  * Asks the server to re-read the subscription from the provider.
  *
@@ -101,7 +132,18 @@ export function useSyncBilling(workspaceId: string | undefined) {
   });
 }
 
+/**
+ * Fetches a portal link. Deliberately does not navigate.
+ *
+ * The portal is somebody else's site, and sending the studio there wholesale
+ * loses the way back: the provider's page has no idea what "back to the
+ * manuscript" means. So the caller opens it in a new tab — and has to open
+ * that tab in the click handler itself, before this request resolves, or the
+ * browser treats it as a popup and blocks it. That timing is why the
+ * navigation cannot live in here.
+ */
 export function useOpenPortal(workspaceId: string | undefined) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       const res = await rpc.api.billing[":workspaceId"].portal.$post({
@@ -110,8 +152,27 @@ export function useOpenPortal(workspaceId: string | undefined) {
       if (!res.ok) throw await apiError(res);
       return res.json();
     },
-    onSuccess: ({ url }) => {
-      window.location.href = url;
+    /* Whatever they did over there — cancelled, changed a card — is a change
+       we have to notice on their return. */
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: keys.billing(workspaceId ?? "") }),
+  });
+}
+
+/** Calls off a scheduled cancellation. */
+export function useResumeSubscription(workspaceId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await rpc.api.billing[":workspaceId"].resume.$post({
+        param: { workspaceId: workspaceId! },
+      });
+      if (!res.ok) throw await apiError(res);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.billing(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: keys.workspaces });
     },
   });
 }
