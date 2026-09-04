@@ -576,16 +576,18 @@ export const ProseEditor = forwardRef<ProseEditorHandle, Props>(
           onDragChange={setDraggingBlocks}
         />
 
-        <EditorContent
-          editor={editor}
-          className="mx-auto min-h-full w-full max-w-[72ch] px-5 pt-10 pb-[30dvh] sm:px-8 sm:pt-14 lg:px-10"
-        />
+        {/* One column holds both the document and its placeholder: `ch` is
+            relative to the element's own font, so two separately centred
+            boxes would land in different places. */}
+        <div className="relative mx-auto min-h-full w-full max-w-[72ch] px-5 pt-10 pb-[30dvh] sm:px-8 sm:pt-14 lg:px-10">
+          <EditorContent editor={editor} />
 
-        {editor.isEmpty && placeholder && (
-          <p className="pointer-events-none absolute top-10 left-1/2 w-full max-w-[72ch] -translate-x-1/2 px-5 font-serif text-lg/8 text-muted-foreground/55 sm:top-14 sm:px-8 sm:text-[1.0625rem] lg:px-10">
-            {placeholder}
-          </p>
-        )}
+          {editor.isEmpty && placeholder && (
+            <p className="pointer-events-none absolute inset-x-5 top-10 font-serif text-[1.0625rem] leading-[1.8] text-muted-foreground/55 sm:inset-x-8 sm:top-14 lg:inset-x-10">
+              {placeholder}
+            </p>
+          )}
+        </div>
       </div>
     );
   },

@@ -1,9 +1,37 @@
-import { MutationCache, QueryClient, environmentManager } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  environmentManager,
+} from "@tanstack/react-query";
 
 import { notifyIfOutOfWords } from "@/lib/out-of-words";
 
+/**
+ * A session the API no longer honours. `proxy.ts` waves these requests through
+ * — all it can see is that a cookie is present — so this is the only place a
+ * revoked or expired session can be noticed, and it must not be noticed as an
+ * error panel on the page the writer was reading.
+ *
+ * A full navigation rather than a router push, deliberately: every cached
+ * answer in memory belonged to the session that just ended.
+ */
+function signInAgain(error: unknown) {
+  if ((error as ApiError).status !== 401) return;
+  if (environmentManager.isServer()) return;
+  if (window.location.pathname === "/sign-in") return;
+
+  const next = `${window.location.pathname}${window.location.search}`;
+  // `expired` tells the proxy not to trust the cookie it let through, which is
+  // what stops the two of them from bouncing the writer back and forth.
+  window.location.replace(
+    `/sign-in?expired=1&next=${encodeURIComponent(next)}`,
+  );
+}
+
 function makeQueryClient() {
   return new QueryClient({
+    queryCache: new QueryCache({ onError: signInAgain }),
     /**
      * Running out of words is handled once, here, rather than at each of the
      * dozen call sites that can hit it. Every AI action is a mutation, so this
@@ -11,7 +39,10 @@ function makeQueryClient() {
      * wherever it happened.
      */
     mutationCache: new MutationCache({
-      onError: (error) => notifyIfOutOfWords(error),
+      onError: (error) => {
+        notifyIfOutOfWords(error);
+        signInAgain(error);
+      },
     }),
     defaultOptions: {
       queries: {

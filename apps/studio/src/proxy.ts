@@ -1,54 +1,69 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Duplicated from the API rather than imported: proxy code must not pull in
- * server modules, and this is a wire-format constant — if it ever changes, every
- * existing session is invalidated anyway.
+ * The studio is signed-in territory end to end, so the gate belongs here
+ * rather than in each page. Without it a signed-out visitor got the whole
+ * shell — rail, header, "New novel" — wrapped around an "Unauthorized" panel,
+ * which reads as a broken app rather than as a closed door.
+ *
+ * Optimistic on purpose: this only asks whether a session cookie is present,
+ * never whether the API still honours it. Proxy runs on every request,
+ * prefetches included, and a round trip to the API on each one would cost far
+ * more than it buys. A cookie the API has since revoked gets through to the
+ * page and is caught there by the 401 handler in `lib/query-client.ts`.
  */
+
+/** Mirrors `SESSION_COOKIE` in the API service. Named here rather than
+ *  imported because proxy code is deployed apart from the app. */
 const SESSION_COOKIE = "bts_session";
+const SIGN_IN = "/sign-in";
 
-const PUBLIC_PATHS = ["/sign-in"];
+/** Kept in step with `REQUESTED_PATH` in `lib/session.ts`. */
+const REQUESTED_PATH = "x-requested-path";
 
-/**
- * A cheap gate, not the authorisation.
- *
- * This only asks whether a session cookie is present — it never validates it,
- * because proxy code runs ahead of the render and is not meant to reach for the
- * database. Deciding whether the token is real, unexpired and allowed to touch
- * a given novel stays in the API, where the ownership check lives.
- *
- * What this buys is the redirect: a signed-out visitor lands on /sign-in
- * instead of on a page that would render empty and then fail.
- */
+/** Only a path on this origin. Anything else in `?next=` — an absolute URL, a
+ *  protocol-relative `//host` — would turn sign-in into an open redirect. */
+function internalPath(value: string | undefined) {
+  if (!value?.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
+
 export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
+  const signedIn = request.cookies.has(SESSION_COOKIE);
+  const atSignIn = pathname === SIGN_IN;
 
-  if (
-    PUBLIC_PATHS.some((path) => pathname.startsWith(path)) ||
-    pathname.startsWith("/api/auth/")
-  ) {
-    return NextResponse.next();
+  if (!signedIn && !atSignIn) {
+    const url = request.nextUrl.clone();
+    url.pathname = SIGN_IN;
+    url.search = "";
+    // Where they were headed, so signing in resumes that chapter instead of
+    // dropping them on the shelf to find it again.
+    url.searchParams.set("next", `${pathname}${search}`);
+    return NextResponse.redirect(url);
   }
 
-  if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
-
-  // API callers get a status they can act on; the mobile client will read this
-  // the same way once it is pointed here.
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  /* `?expired` is the app telling this gate that the cookie it just trusted is
+     no longer honoured by the API. Without that word the two would argue: the
+     app sends the writer here, the cookie sends them back. */
+  if (signedIn && atSignIn && !request.nextUrl.searchParams.has("expired")) {
+    const next =
+      internalPath(request.nextUrl.searchParams.get("next") ?? undefined) ?? "/";
+    return NextResponse.redirect(new URL(next, request.url));
   }
 
-  const target = new URL("/sign-in", request.url);
-  return NextResponse.redirect(target);
+  /* Server components have no way to ask what URL they are rendering, and
+     `requireSession` needs it to say where to come back to. */
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(REQUESTED_PATH, `${pathname}${search}`);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {
+  /* Everything but the API proxy, the build output and static assets. `/api/*`
+     especially: those are rewritten to the API service, which answers a
+     signed-out caller itself. */
   matcher: [
-    /*
-     * Everything except Next's own assets and the favicon. Listing exclusions
-     * rather than inclusions means a new route is protected by default.
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest)$).*)",
   ],
 };
