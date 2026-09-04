@@ -54,6 +54,18 @@ export const CHAR_STATUS_VALUES = ["alive", "dead", "unknown"] as const;
 export const SESSION_CLIENT_VALUES = ["web", "mobile"] as const;
 
 /**
+ * What the writer is actually here to do. Coarse on purpose: it exists to be
+ * shown on a profile and, later, to match collaborators — not to branch logic.
+ */
+export const WRITING_GOAL_VALUES = [
+  "first_novel",
+  "publishing",
+  "serial",
+  "craft",
+  "hobby",
+] as const;
+
+/**
  * How much an event mattered. This is the ranking signal that makes a
  * 600-chapter relationship readable: `pivotal` events are the ones the "why"
  * trace walks and the ones that always survive the prompt's token budget.
@@ -71,10 +83,57 @@ export const users = pgTable(
     /** Always stored lower-cased; compare against `normalizeEmail()` output. */
     email: text("email").notNull(),
     displayName: text("display_name").notNull().default(""),
+
+    /**
+     * The handle. Minted by the system at first sign-in and changeable
+     * afterwards, always stored lower-cased.
+     *
+     * This is the account's stable public name, and the one thing here that
+     * collaboration will need before anything else: an invitation, a comment
+     * byline and a shared workspace all have to address a writer by something
+     * that is unique, safe in a URL and not their email address.
+     */
+    username: text("username").notNull(),
+
+    // --- Public profile ----------------------------------------------------
+
+    /**
+     * Object key in the avatar bucket, not a URL. The bucket's public base is
+     * deployment configuration, and baking it into the row would make moving
+     * buckets a data migration.
+     */
+    avatarKey: text("avatar_key").notNull().default(""),
+    bio: text("bio").notNull().default(""),
+
+    /**
+     * The writer's own taste, in the platform's existing vocabulary.
+     *
+     * Kept as columns rather than a jsonb blob because these are meant to be
+     * queried — "who else writes third-limited horror" is the shape of every
+     * collaboration feature that follows — and because a blob is where
+     * undocumented keys go to accumulate.
+     */
+    favoriteGenres: text("favorite_genres").array().notNull().default(sql`'{}'`),
+    /** Empty string means "no preference stated", not a default of `first`. */
+    preferredPov: text("preferred_pov", { enum: POV_VALUES }),
+    writingGoal: text("writing_goal", { enum: WRITING_GOAL_VALUES }),
+    /** Authors and books that shaped them. Free text; it is a person talking. */
+    influences: text("influences").notNull().default(""),
+    /**
+     * Prose the writer does not want. The same idea as a novel's `styleNotes`,
+     * one level up — an account-wide default a new novel can start from instead
+     * of the author retyping their own dislikes into every book.
+     */
+    avoids: text("avoids").notNull().default(""),
+
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
     lastSeenAt: timestamp("last_seen_at"),
   },
-  (t) => [uniqueIndex("users_email_idx").on(t.email)],
+  (t) => [
+    uniqueIndex("users_email_idx").on(t.email),
+    uniqueIndex("users_username_idx").on(t.username),
+  ],
 );
 
 /**
@@ -206,6 +265,60 @@ export const novels = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [index("novels_workspace_idx").on(t.workspaceId)],
+);
+
+/**
+ * The new-novel wizard's work in progress, one row per unfinished novel.
+ *
+ * The wizard used to hold everything in client state until the final step, so
+ * a closed tab took the premise — and the AI reading the workspace had already
+ * paid for — with it. This row is that state, snapshotted whole on a debounce.
+ * "New novel" mints a row and the wizard lives at its id, so an author can
+ * keep any number of novels half-described at once. It hangs off the user
+ * rather than a workspace because it is pre-novel scratch: nothing here is
+ * shared, billed, or reachable by anyone else, and the workspace edge is only
+ * decided at publish, by `POST /api/novels`.
+ *
+ * The jsonb columns are deliberately untyped at this layer. Their shapes
+ * (`Reading`, `StyleFields`, …) live in `@behindthestory/core/onboarding`,
+ * which imports types from this file — typing them here would close that
+ * cycle. The API route validates them with zod schemas that `satisfies` the
+ * core types, so drift still fails the build, just one package over.
+ */
+export const novelDrafts = pgTable(
+  "novel_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** Where the author stood, so a restore reopens the same step. */
+    step: integer("step").notNull().default(0),
+    maxStep: integer("max_step").notNull().default(0),
+
+    title: text("title").notNull().default(""),
+    /** Whether the title came from the AI's suggestions — keeps the badge honest. */
+    titleFromAi: boolean("title_from_ai").notNull().default(false),
+    description: text("description").notNull().default(""),
+
+    /** The AI's `Reading`, null until step two has run. */
+    reading: jsonb("reading"),
+    readingRevision: integer("reading_revision").notNull().default(0),
+    /** `WizardTurn[]` — the correction history behind the current reading. */
+    turns: jsonb("turns").notNull().default([]),
+
+    /** `StyleFields` as the author has edited them, null until step three. */
+    style: jsonb("style"),
+    /** The untouched `StyleProposal`, kept so rationales survive a restore. */
+    styleProposal: jsonb("style_proposal"),
+    /** Which reading revision the style derives from; -1 means none yet. */
+    styleFrom: integer("style_from").notNull().default(-1),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [index("novel_drafts_user_idx").on(t.userId)],
 );
 
 export const characters = pgTable(
@@ -862,7 +975,10 @@ export const aiSuggestionFeedback = pgTable(
   ],
 );
 
+export type User = typeof users.$inferSelect;
+export type WritingGoal = (typeof WRITING_GOAL_VALUES)[number];
 export type Novel = typeof novels.$inferSelect;
+export type NovelDraft = typeof novelDrafts.$inferSelect;
 export type Character = typeof characters.$inferSelect;
 export type Relationship = typeof relationships.$inferSelect;
 export type StoryEvent = typeof storyEvents.$inferSelect;

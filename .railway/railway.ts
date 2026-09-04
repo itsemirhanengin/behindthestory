@@ -112,6 +112,25 @@ export default defineRailway((ctx) => {
   const polarServer = isProduction ? "production" : "sandbox";
 
   /**
+   * Avatars, in their own bucket per environment.
+   *
+   * Not a naming nicety. Object keys are `avatars/<userId>/<hash>`, so two
+   * environments can only ever collide on a key when they hold the same user
+   * ids — which is exactly what happens the moment a production dump is
+   * restored into dev or onto a laptop. From then on, one click of "Remove
+   * avatar" while testing issues a DELETE against a real writer's object.
+   * Sharing one bucket makes development able to destroy production data, and
+   * a bucket costs nothing to create.
+   *
+   * The credentials below are `preserve()`d, and each environment holds a token
+   * scoped to its own bucket — so dev's key cannot reach production's bucket
+   * even if this string were wrong.
+   */
+  const avatarBucket = isProduction
+    ? "behindthestory-avatars"
+    : "behindthestory-avatars-dev";
+
+  /**
    * Idle sleep, on everything outside production.
    *
    * Railway bills memory and CPU by the minute a container is up, and a dev
@@ -156,6 +175,28 @@ export default defineRailway((ctx) => {
       RESEND_API_KEY: preserve(),
       EMAIL_FROM: preserve(),
       AI_GATEWAY_API_KEY: preserve(),
+
+      /**
+       * The avatar bucket, over R2's S3 API. Only this service needs it: the
+       * worker never touches avatars, and the studio is handed a finished
+       * `avatarUrl` in the profile JSON rather than the bucket's location.
+       *
+       * The endpoint carries no bucket name — the client is path-style and
+       * appends it. `auto` is R2's region; a bucket's physical placement comes
+       * from its location hint and never enters the signature.
+       *
+       * `S3_PUBLIC_BASE_URL` is preserved rather than written because each
+       * bucket has its own public hostname, and today those are Cloudflare's
+       * generated `pub-<hash>.r2.dev` addresses. It becomes a literal here the
+       * day the domain's nameservers move to Cloudflare and the buckets get
+       * real custom domains — the same migration the apex is waiting on.
+       */
+      S3_ENDPOINT: "https://41bc5ad812b1a1f90ee4561fc9d564dd.r2.cloudflarestorage.com",
+      S3_BUCKET: avatarBucket,
+      S3_REGION: "auto",
+      S3_ACCESS_KEY_ID: preserve(),
+      S3_SECRET_ACCESS_KEY: preserve(),
+      S3_PUBLIC_BASE_URL: preserve(),
 
       /**
        * Polar. Sandbox and production are separate organisations with separate

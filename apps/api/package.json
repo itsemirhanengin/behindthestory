@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1125.0",
     "@behindthestory/ai": "workspace:*",
     "@behindthestory/core": "workspace:*",
     "@behindthestory/db": "workspace:*",

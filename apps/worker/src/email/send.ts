@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 
+import { EmailChangeCodeEmail } from "#email/templates/email-change-code";
 import { SignInCodeEmail } from "#email/templates/sign-in-code";
 
 let _resend: Resend | null = null;
@@ -39,5 +40,32 @@ export async function sendSignInCode(to: string, code: string, expiresInMinutes:
     // and would turn a failed send into an account-existence oracle.
     console.error("[email] sign-in code failed", error);
     throw new Error("Failed to send sign-in code");
+  }
+}
+
+/**
+ * The code that confirms a new address.
+ *
+ * Sent only to the address being moved to, never to the current one. The
+ * subject leads with the code for the same lock-screen reason as sign-in, but
+ * names the action rather than "sign-in": the recipient may not have an account
+ * here at all yet, and "your sign-in code" would be a lie to them.
+ */
+export async function sendEmailChangeCode(
+  to: string,
+  code: string,
+  expiresInMinutes: number,
+) {
+  const { error } = await getResend().emails.send({
+    from: sender(),
+    to,
+    subject: `${code} — confirm your BehindTheStory email`,
+    react: EmailChangeCodeEmail({ code, expiresInMinutes }),
+    headers: { "X-Entity-Ref-ID": crypto.randomUUID() },
+  });
+
+  if (error) {
+    console.error("[email] email-change code failed", error);
+    throw new Error("Failed to send email-change code");
   }
 }

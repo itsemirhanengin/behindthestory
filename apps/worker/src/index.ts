@@ -5,6 +5,7 @@ import { QUEUE_NAMES, registerSchedules } from "@behindthestory/jobs/queues";
 
 import { processBillingReconcile } from "#processors/billing-reconcile";
 import { processChapterIndex } from "#processors/chapter-index";
+import { processEmailChangeCode } from "#processors/email-change-code";
 import { processSignInEmail } from "#processors/sign-in-email";
 import { processWordHoldsSweep } from "#processors/word-holds";
 
@@ -24,6 +25,17 @@ const workers = [
     concurrency: 10,
     connection: queueConnection(),
   }),
+  /**
+   * Its own worker rather than a second handler on the sign-in queue: both are
+   * codes somebody is sitting and waiting for, and a queue shared with the far
+   * more frequent sign-in mail would let a burst of sign-ins delay a writer
+   * staring at an empty code field.
+   */
+  new Worker(
+    QUEUE_NAMES.emailChangeCode,
+    (job) => processEmailChangeCode(job.data),
+    { concurrency: 10, connection: queueConnection() },
+  ),
   /**
    * The two billing sweeps. Both are periodic and both walk every affected
    * row, so a second copy running concurrently would only duplicate work —

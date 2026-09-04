@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
 import { getDb, sessions, users, type SESSION_CLIENT_VALUES } from "@behindthestory/db";
+import { mintUsername } from "@behindthestory/core/username";
 
 import { provisionPersonalWorkspace } from "#lib/auth/workspace";
 
@@ -12,10 +13,19 @@ export const SESSION_TTL_DAYS = 30;
 /** Refreshing on every request would write on every page view. */
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 
+/**
+ * The account as every authenticated route sees it.
+ *
+ * `username` and `avatarKey` ride along rather than being fetched per page:
+ * the studio's header renders an avatar and a name on every screen, and the
+ * session is a request those screens already make.
+ */
 export type AuthenticatedUser = {
   id: string;
   email: string;
   displayName: string;
+  username: string;
+  avatarKey: string;
 };
 
 function hashToken(token: string) {
@@ -58,12 +68,27 @@ export async function startSession(input: {
 
     // Passwordless means signup and signin are the same gesture: proving you
     // can read the address is the whole account-creation step.
+    //
+    // The handle is minted here rather than asked for, so nothing stands
+    // between reading a code and being inside. Uniqueness is checked inside the
+    // same transaction, and the unique index is still the real guarantee: two
+    // simultaneous first sign-ins that draw the same name lose the race rather
+    // than both writing it.
     const account =
       existing ??
       (
         await tx
           .insert(users)
-          .values({ email: input.email })
+          .values({
+            email: input.email,
+            username: await mintUsername(async (candidate) => {
+              const [taken] = await tx
+                .select({ id: users.id })
+                .from(users)
+                .where(eq(users.username, candidate));
+              return Boolean(taken);
+            }),
+          })
           .returning()
       )[0];
 
@@ -90,6 +115,8 @@ export async function startSession(input: {
       id: user.id,
       email: user.email,
       displayName: user.displayName,
+      username: user.username,
+      avatarKey: user.avatarKey,
     } satisfies AuthenticatedUser,
   };
 }
@@ -108,6 +135,8 @@ export async function resolveSession(
       id: users.id,
       email: users.email,
       displayName: users.displayName,
+      username: users.username,
+      avatarKey: users.avatarKey,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -128,7 +157,13 @@ export async function resolveSession(
       .where(eq(sessions.id, row.sessionId));
   }
 
-  return { id: row.id, email: row.email, displayName: row.displayName };
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.displayName,
+    username: row.username,
+    avatarKey: row.avatarKey,
+  };
 }
 
 export async function revokeSession(token: string) {

@@ -6,6 +6,8 @@ import { sealCode } from "./sealed-code";
 export const QUEUE_NAMES = {
   chapterIndex: "chapter-index",
   signInEmail: "sign-in-email",
+  /** Proves the writer can read the address they are moving their account to. */
+  emailChangeCode: "email-change-code",
   /** Releases reservations left behind by generations that never reported back. */
   wordHolds: "word-holds",
   /** Re-reads subscription state from the payment provider and fixes drift. */
@@ -26,12 +28,27 @@ export type SignInEmailJob = {
   expiresInMinutes: number;
 };
 
+/**
+ * Carries the *new* address only.
+ *
+ * The account's current address is deliberately not on the payload: nothing in
+ * the mail needs it, and a queue entry that pairs someone's old address with
+ * their new one is a worse thing to leak than either alone.
+ */
+export type EmailChangeCodeJob = {
+  email: string;
+  /** Ciphertext from `sealCode`, never the code itself. */
+  sealedCode: string;
+  expiresInMinutes: number;
+};
+
 /** Both schedules are periodic sweeps over everything; neither takes input. */
 export type ScheduledJob = Record<string, never>;
 
 export type JobPayloads = {
   "chapter-index": ChapterIndexJob;
   "sign-in-email": SignInEmailJob;
+  "email-change-code": EmailChangeCodeJob;
   "word-holds": ScheduledJob;
   "billing-reconcile": ScheduledJob;
 };
@@ -115,6 +132,28 @@ export async function enqueueSignInEmail(input: {
   expiresInMinutes: number;
 }) {
   return getQueue(QUEUE_NAMES.signInEmail).add(
+    "send",
+    {
+      email: input.email,
+      sealedCode: sealCode(input.code),
+      expiresInMinutes: input.expiresInMinutes,
+    },
+    {
+      removeOnComplete: true,
+      removeOnFail: { count: 100 },
+      attempts: 4,
+      backoff: { type: "exponential", delay: 1_000 },
+    },
+  );
+}
+
+/** Same delivery guarantees as the sign-in code, and for the same reason. */
+export async function enqueueEmailChangeCode(input: {
+  email: string;
+  code: string;
+  expiresInMinutes: number;
+}) {
+  return getQueue(QUEUE_NAMES.emailChangeCode).add(
     "send",
     {
       email: input.email,
